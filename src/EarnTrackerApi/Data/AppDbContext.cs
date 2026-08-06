@@ -3,13 +3,14 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EarnTrackerApi.Data;
 
-public sealed class EarnTrackerDbContext(DbContextOptions<EarnTrackerDbContext> options)
+public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     : DbContext(options)
 {
     public DbSet<User> Users => Set<User>();
     public DbSet<IncomeSource> IncomeSources => Set<IncomeSource>();
     public DbSet<EarningTransaction> Transactions => Set<EarningTransaction>();
     public DbSet<FinancialGoal> FinancialGoals => Set<FinancialGoal>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -18,6 +19,7 @@ public sealed class EarnTrackerDbContext(DbContextOptions<EarnTrackerDbContext> 
             entity.HasIndex(user => user.Email).IsUnique();
             entity.Property(user => user.Email).HasMaxLength(320);
             entity.Property(user => user.DisplayName).HasMaxLength(100);
+            entity.Property(user => user.PasswordHash).HasMaxLength(500);
         });
 
         modelBuilder.Entity<IncomeSource>(entity =>
@@ -58,6 +60,16 @@ public sealed class EarnTrackerDbContext(DbContextOptions<EarnTrackerDbContext> 
             entity.HasOne(goal => goal.User)
                 .WithMany(user => user.FinancialGoals)
                 .HasForeignKey(goal => goal.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.HasIndex(token => token.TokenHash).IsUnique();
+            entity.Property(token => token.TokenHash).HasMaxLength(64);
+            entity.HasOne(token => token.User)
+                .WithMany(user => user.RefreshTokens)
+                .HasForeignKey(token => token.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

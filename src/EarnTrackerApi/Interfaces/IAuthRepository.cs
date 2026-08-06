@@ -1,0 +1,20 @@
+using EarnTrackerApi.Models;
+
+namespace EarnTrackerApi.Interfaces;
+
+public interface IAuthRepository
+{
+    Task<User?> GetByIdAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default);
+    Task<User?> GetByEmailAsync(
+        string email,
+        CancellationToken cancellationToken = default);
+    Task AddAsync(User user, CancellationToken cancellationToken = default);
+    Task<RefreshToken?> GetRefreshTokenAsync(
+        string tokenHash,
+        CancellationToken cancellationToken = default);
+    Task AddRefreshTokenAsync(
+        RefreshToken refreshToken,
+        CancellationToken cancellationToken = default);
+}

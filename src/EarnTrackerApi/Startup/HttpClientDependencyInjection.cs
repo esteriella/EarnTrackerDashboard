@@ -1,3 +1,5 @@
+using EarnTrackerApi.Interfaces;
+using EarnTrackerApi.Services;
 using System.Net.Http.Headers;
 
 namespace EarnTrackerApi.Startup;
@@ -5,6 +7,7 @@ namespace EarnTrackerApi.Startup;
 public static class HttpClientDI
 {
     public const string PayPalClient = "PayPal";
+    public const string PayPalAccountsClient = "PayPalAccounts";
     public const string PayStackClient = "PayStack";
     public const string CryptoClient = "Crypto";
 
@@ -14,21 +17,28 @@ public static class HttpClientDI
         _ = GetRequiredSetting(builder, "PayPal:ClientSecret");
         var payStackClientSecret = GetRequiredSetting(builder, "PayStack:ClientSecret");
 
-        AddClient(builder, PayPalClient, "PayPal:BaseUrl");
+        var payPalBaseAddress = GetRequiredUri(builder, "PayPal:BaseUrl");
+        builder.Services.AddHttpClient(PayPalAccountsClient, client =>
+            ConfigureClient(client, payPalBaseAddress));
+        builder.Services.AddSingleton<IPayPalTokenService, PayPalTokenService>();
+        builder.Services.AddTransient<PayPalAuthenticationHandler>();
+        builder.Services.AddHttpClient<IPayPalService, PayPalService>(client =>
+            ConfigureClient(client, payPalBaseAddress))
+            .AddHttpMessageHandler<PayPalAuthenticationHandler>();
+
         AddClient(
             builder,
             CryptoClient,
             "ExternalServices:Crypto");
 
         var payStackBaseAddress = GetRequiredUri(builder, "PayStack:BaseUrl");
-        builder.Services.AddHttpClient(PayStackClient, client =>
-        {
-            ConfigureClient(client, payStackBaseAddress);
-            client.DefaultRequestHeaders.Authorization =
-                new AuthenticationHeaderValue("Bearer", payStackClientSecret);
-        });
+        builder.Services.AddTransient<PayStackAuthenticationHandler>();
+        builder.Services.AddHttpClient<IPayStackService, PayStackService>(client =>
+            ConfigureClient(client, payStackBaseAddress))
+            .AddHttpMessageHandler<PayStackAuthenticationHandler>();
 
         // PayPal credentials are applied only when requesting an OAuth token.
+        _ = payStackClientSecret;
     }
 
     private static void AddClient(

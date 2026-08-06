@@ -1,3 +1,5 @@
+using EarnTrackerApi.Extensions;
+
 namespace EarnTrackerApi.Startup;
 
 public static class ApplicationStartup
@@ -10,6 +12,7 @@ public static class ApplicationStartup
         services.AddOpenApi();
         services.AddProblemDetails();
         services.AddAuthorization();
+        services.AddApplicationCore();
 
         services.AddApplicationCors(configuration);
 

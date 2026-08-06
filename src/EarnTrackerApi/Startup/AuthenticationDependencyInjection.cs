@@ -1,6 +1,5 @@
+using EarnTrackerApi.Helpers.Jwt;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
-using System.Text;
 
 namespace EarnTrackerApi.Startup;
 
@@ -8,18 +7,8 @@ public static class AuthDI
 {
     public static void AddJwt(this WebApplicationBuilder builder)
     {
-        var issuer = builder.Configuration["Jwt:Issuer"]
-            ?? throw new InvalidOperationException("Auth authority not configured.");
-        var audience = builder.Configuration["Jwt:Audience"]
-            ?? throw new InvalidOperationException("Auth audience not configured.");
-        var key = builder.Configuration["Jwt:Key"]
-            ?? throw new InvalidOperationException("Auth key not configured.");
-
-        if (Encoding.UTF8.GetByteCount(key) < 32)
-        {
-            throw new InvalidOperationException(
-                "Jwt:Key must be at least 32 bytes long.");
-        }
+        var settings = builder.Configuration.GetJwtSettings();
+        builder.Services.AddSingleton(settings);
 
         builder.Services.AddAuthentication(options =>
         {
@@ -28,20 +17,9 @@ public static class AuthDI
         })
         .AddJwtBearer(options =>
         {
-            options.TokenValidationParameters = new TokenValidationParameters
-            {
-                ValidateIssuer = true,
-                ValidateAudience = true,
-                ValidateLifetime = true,
-                ValidateIssuerSigningKey = true,
-                ValidIssuer = issuer,
-                ValidAudience = audience,
-                IssuerSigningKey = new SymmetricSecurityKey(
-                    Encoding.UTF8.GetBytes(key))
-            };
-
-            options.Authority = issuer;
-            options.Audience = audience;
+            options.TokenValidationParameters =
+                JwtConfiguration.CreateValidationParameters(settings);
+            options.Audience = settings.Audience;
             options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
         });
     }

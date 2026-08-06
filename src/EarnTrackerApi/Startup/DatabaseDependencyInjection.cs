@@ -15,7 +15,7 @@ public static class Database
                 "Connection string 'DefaultConnection' is not configured.");
         }
 
-        builder.Services.AddDbContext<EarnTrackerDbContext>(options =>
+        builder.Services.AddDbContext<AppDbContext>(options =>
         {
             options.UseNpgsql(
                 connectionString,
