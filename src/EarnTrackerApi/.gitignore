@@ -1,0 +1,10 @@
+# Build and IDE output
+bin/
+obj/
+.vs/
+
+# Local secrets
+appsettings.Local.json
+
+# Rolling Serilog output
+logs/
