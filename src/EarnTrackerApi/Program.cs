@@ -1,7 +1,10 @@
+using EarnTrackerApi.Helpers;
 using EarnTrackerApi.Startup;
 using Microsoft.AspNetCore.DataProtection;
 
 var builder = WebApplication.CreateBuilder(args);
+
+HashHelperSettings.Configure(builder.Configuration);
 
 if (builder.Environment.IsDevelopment())
 {

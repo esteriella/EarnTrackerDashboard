@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "EarnTracker Dashboard",
-  description: "Track earnings and monitor financial performance.",
+  title: "EarnTracker — Your earnings, clearly",
+  description: "See payments, fees, income sources and goals in one simple dashboard.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
