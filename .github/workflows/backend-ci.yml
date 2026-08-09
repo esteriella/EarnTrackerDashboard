@@ -1,0 +1,82 @@
+name: Backend CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/EarnTrackerApi/**"
+      - ".github/workflows/backend-ci.yml"
+  pull_request:
+    paths:
+      - "src/EarnTrackerApi/**"
+      - ".github/workflows/backend-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build and test API
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: src/EarnTrackerApi
+
+    # Safe CI placeholders satisfy startup validation. This workflow never
+    # starts the API or connects to PostgreSQL.
+    env:
+      ASPNETCORE_ENVIRONMENT: CI
+      ConnectionStrings__DefaultConnection: Host=localhost;Port=5432;Database=EarnTracker;Username=postgres;Password=ci-placeholder
+      Jwt__Key: ci-only-jwt-key-at-least-32-bytes-long
+      Jwt__Issuer: EarnTrackerApi
+      Jwt__Audience: EarnTrackerWeb
+      HashHelper__SecretKey: ci-only-hash-key-at-least-32-bytes-long
+      PayPal__ClientId: ci-placeholder
+      PayPal__ClientSecret: ci-placeholder
+      PayStack__ClientSecret: ci-placeholder
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+          dotnet-quality: ga
+
+      - name: Restore local tools
+        run: dotnet tool restore
+
+      - name: Restore dependencies
+        run: dotnet restore EarnTrackerApi.slnx
+
+      - name: Build
+        run: dotnet build EarnTrackerApi.slnx --configuration Release --no-restore
+
+      - name: Run tests when present
+        shell: bash
+        run: |
+          mapfile -t test_projects < <(find .. -maxdepth 2 -type f \( -name "*Tests.csproj" -o -name "*Test.csproj" \))
+          if (( ${#test_projects[@]} == 0 )); then
+            echo "No backend test projects found; skipping tests."
+          else
+            for project in "${test_projects[@]}"; do
+              dotnet test "$project" --configuration Release
+            done
+          fi
+
+      - name: Check EF Core migration model
+        run: >-
+          dotnet tool run dotnet-ef migrations has-pending-model-changes
+          --context AppDbContext
+          --configuration Release
+          --no-build
