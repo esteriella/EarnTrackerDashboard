@@ -75,7 +75,7 @@ export function Dashboard() {
     </aside>
 
     <main className="main">
-      <header><div><button className="mobile-brand" aria-label="Menu">E</button><p>{session ? "Your workspace" : "Preview workspace"}</p><h1>{active}</h1></div><div className="header-actions"><button className="icon-button" aria-label="Notifications">♢<span /></button><button className="primary" onClick={() => session ? setVerifyOpen(true) : setAuthOpen(true)}>{session ? "+ Verify payment" : "Sign in"}</button></div></header>
+      <header><div><button className="mobile-brand" aria-label="Menu">E</button><p>{session ? "Your workspace" : "Preview workspace"}</p><h1>{active}</h1></div><div className="header-actions"><button className="icon-button" aria-label="Notifications">♢<span /></button><button className="primary" onClick={() => session ? setVerifyOpen(true) : setAuthOpen(true)}>{session ? "+ Payment" : "Sign in"}</button></div></header>
       {notice && <div className="notice"><span>{notice}</span><button onClick={() => setNotice("")}>×</button></div>}
 
       {active === "Overview" && <>
@@ -111,7 +111,7 @@ function SectionView({ active, overview, transactions, onVerify }: { active: str
   if (active === "Transactions") return <section className="card page-card"><CardHead title="All transactions" action="Export CSV"/><TransactionTable transactions={transactions}/></section>;
   if (active === "Earnings") return <section className="source-grid">{overview.incomeSources.map((source) => <article className="card source-card" key={source.id}><span className="source-logo">{source.name[0]}</span><div><small>{source.provider}</small><h3>{source.name}</h3><p>{source.transactions.length} payments</p></div><strong>{money(source.transactions.reduce((sum, item) => sum + item.amount - item.fee, 0), source.currency)}</strong></article>)}</section>;
   if (active === "Goals") return <section className="source-grid">{overview.financialGoals.map((item) => <article className="card source-card" key={item.id}><span className="source-logo">◎</span><div><small>Ends {item.targetDate}</small><h3>{item.name}</h3><p>{Math.round(item.progressPercentage)}% complete</p></div><strong>{money(item.currentAmount, item.currency)} / {money(item.targetAmount, item.currency)}</strong></article>)}</section>;
-  return <section className="connections"><div className="connection-intro"><p className="eyebrow">PAYMENT CONNECTIONS</p><h2>Keep every payment in one place.</h2><p>Check a PayPal capture or Paystack payment and add it to your workflow.</p><button className="primary" onClick={onVerify}>Verify a payment</button></div>{["PayPal", "Paystack"].map((name) => <article className="card connection" key={name}><span className={`provider ${name.toLowerCase()}`}>{name === "PayPal" ? "P" : "P₦"}</span><div><h3>{name}</h3><p>Ready to verify payments</p></div><span className="connected">● Available</span></article>)}</section>;
+  return <section className="connections"><div className="connection-intro"><p className="eyebrow">PAYMENT CONNECTIONS</p><h2>Test a payment from start to finish.</h2><p>Create a PayPal Sandbox order, approve it as a test buyer, and capture it. You can also check Paystack payments.</p><button className="primary" onClick={onVerify}>Start a payment</button></div>{["PayPal", "Paystack"].map((name) => <article className="card connection" key={name}><span className={`provider ${name.toLowerCase()}`}>{name === "PayPal" ? "P" : "P₦"}</span><div><h3>{name}</h3><p>{name === "PayPal" ? "Create, approve and capture test orders" : "Check a transaction reference"}</p></div><span className="connected">● Available</span></article>)}</section>;
 }
 
 function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (session: AuthSession) => void }) {
@@ -120,4 +120,54 @@ function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (se
   return <div className="modal-backdrop" onMouseDown={onClose}><div className="modal" onMouseDown={(e) => e.stopPropagation()}><button className="modal-close" onClick={onClose}>×</button><span className="brand-mark">E</span><h2>{mode === "login" ? "Welcome back" : "Create your account"}</h2><p>{mode === "login" ? "Sign in to see your live earnings." : "Start keeping all your earnings in one view."}</p><form onSubmit={submit}>{mode === "register" && <label>Your name<input name="name" required minLength={2} placeholder="Opeyemi Ade" /></label>}<label>Email address<input name="email" type="email" required placeholder="you@example.com" /></label><label>Password<input name="password" type="password" required minLength={8} maxLength={12} placeholder="8–12 characters" /></label>{error && <p className="form-error">{error}</p>}<button className="primary" disabled={busy}>{busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}</button></form><button className="switch" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }}>{mode === "login" ? "New here? Create an account" : "Already have an account? Sign in"}</button></div></div>;
 }
 
-function VerifyModal({ token, onClose }: { token: string; onClose: () => void }) { const [provider, setProvider] = useState<"paypal"|"paystack">("paypal"); const [result, setResult] = useState(""); const [busy, setBusy] = useState(false); async function submit(e: FormEvent<HTMLFormElement>) { e.preventDefault(); setBusy(true); setResult(""); const reference = String(new FormData(e.currentTarget).get("reference")); try { await api.verify(provider, reference, token); setResult("Payment verified successfully."); } catch (error) { setResult(error instanceof Error ? error.message : "Could not verify this payment."); } finally { setBusy(false); } } return <div className="modal-backdrop" onMouseDown={onClose}><div className="modal" onMouseDown={(e) => e.stopPropagation()}><button className="modal-close" onClick={onClose}>×</button><h2>Verify a payment</h2><p>Choose where the payment came from and enter its reference.</p><div className="provider-tabs"><button className={provider === "paypal" ? "selected" : ""} onClick={() => setProvider("paypal")}>PayPal</button><button className={provider === "paystack" ? "selected" : ""} onClick={() => setProvider("paystack")}>Paystack</button></div><form onSubmit={submit}><label>{provider === "paypal" ? "Capture ID" : "Transaction reference"}<input name="reference" required placeholder={provider === "paypal" ? "e.g. 5TY..." : "e.g. TRX_..."}/></label>{result && <p className="form-result">{result}</p>}<button className="primary" disabled={busy}>{busy ? "Checking…" : "Verify payment"}</button></form></div></div>; }
+function VerifyModal({ token, onClose }: { token: string; onClose: () => void }) {
+  const [provider, setProvider] = useState<"paypal" | "paystack" | "capture">("paypal");
+  const [orderId, setOrderId] = useState("");
+  const [approvalUrl, setApprovalUrl] = useState("");
+  const [orderStatus, setOrderStatus] = useState("");
+  const [result, setResult] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  function showError(error: unknown) {
+    setResult(error instanceof Error ? error.message : "Could not complete this request.");
+  }
+
+  async function createOrder(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy(true); setResult("");
+    const data = new FormData(event.currentTarget);
+    try {
+      const order = await api.createPayPalOrder(Number(data.get("amount")), String(data.get("currency")), String(data.get("description")), token);
+      setOrderId(order.id); setOrderStatus(order.status);
+      setApprovalUrl(order.links?.find((link) => link.rel === "approve")?.href ?? "");
+      setResult("Order created. Approve it with your PayPal Sandbox buyer account.");
+    } catch (error) { showError(error); } finally { setBusy(false); }
+  }
+
+  async function refreshOrder() {
+    setBusy(true); setResult("");
+    try { const order = await api.getPayPalOrder(orderId, token); setOrderStatus(order.status); setResult(`Order status: ${order.status}.`); }
+    catch (error) { showError(error); } finally { setBusy(false); }
+  }
+
+  async function captureOrder() {
+    setBusy(true); setResult("");
+    try { const order = await api.capturePayPalOrder(orderId, token); setOrderStatus(order.status); setResult(order.status === "COMPLETED" ? "Payment captured successfully." : `Order status: ${order.status}.`); }
+    catch (error) { showError(error); } finally { setBusy(false); }
+  }
+
+  async function verifyReference(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy(true); setResult("");
+    const reference = String(new FormData(event.currentTarget).get("reference"));
+    try { await api.verify(provider === "capture" ? "paypal" : "paystack", reference, token); setResult("Payment found successfully."); }
+    catch (error) { showError(error); } finally { setBusy(false); }
+  }
+
+  return <div className="modal-backdrop" onMouseDown={onClose}><div className="modal payment-modal" onMouseDown={(e) => e.stopPropagation()}>
+    <button className="modal-close" onClick={onClose}>×</button><h2>Payments</h2><p>Create a test PayPal order or check an existing payment.</p>
+    <div className="provider-tabs"><button className={provider === "paypal" ? "selected" : ""} onClick={() => { setProvider("paypal"); setResult(""); }}>New PayPal order</button><button className={provider === "paystack" ? "selected" : ""} onClick={() => { setProvider("paystack"); setResult(""); }}>Paystack</button><button className={provider === "capture" ? "selected" : ""} onClick={() => { setProvider("capture"); setResult(""); }}>PayPal capture</button></div>
+    {provider === "paypal" ? <>
+      {!orderId ? <form onSubmit={createOrder}><div className="form-row"><label>Amount<input name="amount" type="number" min="0.01" max="1000000" step="0.01" defaultValue="10.00" required /></label><label>Currency<input name="currency" minLength={3} maxLength={3} pattern="[A-Za-z]{3}" defaultValue="USD" required /></label></div><label>Description<input name="description" maxLength={127} defaultValue="Freelancer earnings tracker sandbox test" required /></label><button className="primary" disabled={busy}>{busy ? "Creating…" : "Create test order"}</button></form> : <div className="order-steps"><div className="order-summary"><span>Order</span><strong>{orderId}</strong><span className={`order-state ${orderStatus.toLowerCase()}`}>{orderStatus}</span></div><ol><li><strong>Approve the order</strong><span>Sign in with a PayPal Sandbox buyer account.</span>{approvalUrl && <a className="primary approval-link" href={approvalUrl} target="_blank" rel="noreferrer">Open PayPal Sandbox ↗</a>}</li><li><strong>Check approval</strong><span>Return here after approving the order.</span><button className="secondary" onClick={refreshOrder} disabled={busy}>Check order status</button></li><li><strong>Capture payment</strong><span>Capture once the order status is approved.</span><button className="primary" onClick={captureOrder} disabled={busy || orderStatus === "COMPLETED"}>{orderStatus === "COMPLETED" ? "Payment captured" : "Capture payment"}</button></li></ol><button className="switch" onClick={() => { setOrderId(""); setApprovalUrl(""); setOrderStatus(""); setResult(""); }}>Create another order</button></div>}
+    </> : <form onSubmit={verifyReference}><label>{provider === "capture" ? "Capture ID" : "Transaction reference"}<input name="reference" required placeholder={provider === "capture" ? "e.g. 5TY..." : "e.g. TRX_..."}/></label><button className="primary" disabled={busy}>{busy ? "Checking…" : "Check payment"}</button></form>}
+    {result && <p className="form-result">{result}</p>}
+  </div></div>;
+}

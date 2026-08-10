@@ -42,6 +42,17 @@ export type Overview = {
   financialGoals: Goal[];
 };
 
+export type PayPalOrder = {
+  id: string;
+  status: string;
+  links?: { href: string; rel: string; method?: string }[];
+  purchase_units?: Array<{
+    description?: string;
+    amount?: { currency_code: string; value: string };
+    payments?: { captures?: Array<{ id: string; status: string }> };
+  }>;
+};
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5048";
 
 async function request<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {
@@ -67,6 +78,17 @@ export const api = {
   register: (name: string, email: string, password: string) =>
     request<AuthSession>("/api/auth/register", { method: "POST", body: JSON.stringify({ name, email, password }) }),
   overview: (token: string) => request<Overview>("/api/library/overview", {}, token),
+  createPayPalOrder: (amount: number, currency: string, description: string, token: string) =>
+    request<PayPalOrder>("/api/integrations/paypal/orders", {
+      method: "POST",
+      body: JSON.stringify({ amount, currency, description }),
+    }, token),
+  getPayPalOrder: (orderId: string, token: string) =>
+    request<PayPalOrder>(`/api/integrations/paypal/orders/${encodeURIComponent(orderId)}`, {}, token),
+  capturePayPalOrder: (orderId: string, token: string) =>
+    request<PayPalOrder>(`/api/integrations/paypal/orders/${encodeURIComponent(orderId)}/capture`, {
+      method: "POST",
+    }, token),
   verify: (provider: "paypal" | "paystack", reference: string, token: string) =>
     request<Record<string, unknown>>(
       provider === "paypal"
