@@ -18,6 +18,7 @@ public static class HttpClientDI
         var payStackClientSecret = GetRequiredSetting(builder, "PayStack:ClientSecret");
 
         var payPalBaseAddress = GetRequiredUri(builder, "PayPal:BaseUrl");
+        EnsureSafePayPalEnvironment(builder, payPalBaseAddress);
         builder.Services.AddHttpClient(PayPalAccountsClient, client =>
             ConfigureClient(client, payPalBaseAddress));
         builder.Services.AddSingleton<IPayPalTokenService, PayPalTokenService>();
@@ -39,6 +40,25 @@ public static class HttpClientDI
 
         // PayPal credentials are applied only when requesting an OAuth token.
         _ = payStackClientSecret;
+    }
+
+    private static void EnsureSafePayPalEnvironment(
+        WebApplicationBuilder builder,
+        Uri baseAddress)
+    {
+        const string sandboxHost = "api-m.sandbox.paypal.com";
+
+        if (builder.Environment.IsDevelopment() &&
+            !string.Equals(
+                baseAddress.Host,
+                sandboxHost,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Development must use the PayPal Sandbox API at " +
+                $"https://{sandboxHost}/. The configured PayPal:BaseUrl " +
+                $"points to '{baseAddress.Host}'.");
+        }
     }
 
     private static void AddClient(

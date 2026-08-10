@@ -1,6 +1,7 @@
 using EarnTrackerApi.Data;
 using EarnTrackerApi.Extensions;
 using Microsoft.EntityFrameworkCore;
+using Scalar.AspNetCore;
 using Serilog;
 
 namespace EarnTrackerApi.Startup;
@@ -14,6 +15,10 @@ public static class ApplicationPipeline
         if (app.Environment.IsDevelopment())
         {
             app.MapOpenApi();
+            app.MapScalarApiReference(options => options
+                .WithTitle("EarnTracker API")
+                .WithTheme(ScalarTheme.DeepSpace)
+                .AddPreferredSecuritySchemes(["Bearer"]));
         }
         else
         {
