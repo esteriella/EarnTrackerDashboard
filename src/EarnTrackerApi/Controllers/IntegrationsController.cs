@@ -1,5 +1,6 @@
 using System.Text.Json;
 using EarnTrackerApi.Dtos.IntegrationDto;
+using EarnTrackerApi.Extensions;
 using EarnTrackerApi.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,7 +12,8 @@ namespace EarnTrackerApi.Controllers;
 [Route("api/integrations")]
 public sealed class IntegrationsController(
     IPayPalService payPal,
-    IPayStackService payStack) : ControllerBase
+    IPayStackService payStack,
+    IPaymentRecordingService paymentRecorder) : ControllerBase
 {
     /// <summary>Creates a PayPal Sandbox order and returns its buyer approval link.</summary>
     [HttpPost("paypal/orders")]
@@ -30,6 +32,10 @@ public sealed class IntegrationsController(
         CancellationToken cancellationToken)
     {
         using var response = await payPal.GetOrderAsync(orderId, cancellationToken);
+        await paymentRecorder.RecordPayPalCapturesAsync(
+            User.GetUserId(),
+            response.RootElement,
+            cancellationToken);
         return Ok(response.RootElement.Clone());
     }
 
@@ -40,6 +46,10 @@ public sealed class IntegrationsController(
         CancellationToken cancellationToken)
     {
         using var response = await payPal.CaptureOrderAsync(orderId, cancellationToken);
+        await paymentRecorder.RecordPayPalCapturesAsync(
+            User.GetUserId(),
+            response.RootElement,
+            cancellationToken);
         return Ok(response.RootElement.Clone());
     }
 
@@ -50,6 +60,10 @@ public sealed class IntegrationsController(
         CancellationToken cancellationToken)
     {
         using var response = await payPal.GetCaptureAsync(captureId, cancellationToken);
+        await paymentRecorder.RecordPayPalCapturesAsync(
+            User.GetUserId(),
+            response.RootElement,
+            cancellationToken);
         return Ok(response.RootElement.Clone());
     }
 

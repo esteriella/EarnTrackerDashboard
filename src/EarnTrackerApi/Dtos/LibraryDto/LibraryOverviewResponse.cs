@@ -37,4 +37,6 @@ public sealed record FinancialGoalResponse(
     decimal ProgressPercentage,
     string Currency,
     DateOnly StartDate,
-    DateOnly TargetDate);
+    DateOnly TargetDate,
+    string Status,
+    bool IsAchieved);

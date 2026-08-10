@@ -1,7 +1,7 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { api, AuthSession, Overview, Transaction } from "@/lib/api";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { api, AuthSession, Goal, Overview, Transaction } from "@/lib/api";
 
 const demoOverview: Overview = {
   totals: [{ currency: "USD", gross: 12450, fees: 608, net: 11842 }],
@@ -17,7 +17,7 @@ const demoOverview: Overview = {
       { id: "t4", externalId: "BNK-207", amount: 3200, fee: 0, currency: "USD", status: "Completed", description: "Monthly retainer", occurredAt: "2026-07-24T10:00:00Z" },
     ]},
   ],
-  financialGoals: [{ id: "g1", name: "August income goal", targetAmount: 15000, currentAmount: 11842, progressPercentage: 79, currency: "USD", startDate: "2026-08-01", targetDate: "2026-08-31" }],
+  financialGoals: [{ id: "g1", name: "August income goal", targetAmount: 15000, currentAmount: 11842, progressPercentage: 79, currency: "USD", startDate: "2026-08-01", targetDate: "2026-08-31", status: "Active", isAchieved: false }],
 };
 
 const nav = ["Overview", "Earnings", "Transactions", "Goals", "Connections"];
@@ -42,6 +42,7 @@ export function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
   const [verifyOpen, setVerifyOpen] = useState(false);
+  const [goalOpen, setGoalOpen] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem("earntracker-session");
@@ -52,14 +53,32 @@ export function Dashboard() {
     } catch { localStorage.removeItem("earntracker-session"); }
   }, []);
 
+  const refreshOverview = useCallback(async () => {
+    if (!session) return;
+    setLoading(true);
+    try {
+      setOverview(await api.overview(session.token));
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not update the dashboard.");
+    } finally {
+      setLoading(false);
+    }
+  }, [session]);
+
   useEffect(() => {
     if (!session) return;
-    api.overview(session.token).then(setOverview).catch((error) => setNotice(error.message)).finally(() => setLoading(false));
+    let isCurrent = true;
+    api.overview(session.token)
+      .then((value) => { if (isCurrent) setOverview(value); })
+      .catch((error) => { if (isCurrent) setNotice(error.message); })
+      .finally(() => { if (isCurrent) setLoading(false); });
+    return () => { isCurrent = false; };
   }, [session]);
 
   const transactions = useMemo(() => overview.incomeSources.flatMap((source) => source.transactions.map((item) => ({ ...item, source: source.name }))).sort((a, b) => +new Date(b.occurredAt) - +new Date(a.occurredAt)), [overview]);
   const total = overview.totals[0] ?? { currency: "USD", gross: 0, fees: 0, net: 0 };
-  const goal = overview.financialGoals[0];
+  const goal = overview.financialGoals.find((item) => item.status === "Active")
+    ?? overview.financialGoals.find((item) => item.status === "Achieved");
   const displayName = session?.name || "Opeyemi";
 
   function signOut() { localStorage.removeItem("earntracker-session"); setSession(null); setOverview(demoOverview); setNotice("You have signed out."); }
@@ -93,11 +112,12 @@ export function Dashboard() {
         <section className="card recent"><CardHead title="Recent transactions" action="View all →"/><TransactionTable transactions={transactions.slice(0, 5)}/></section>
       </>}
 
-      {active !== "Overview" && <SectionView active={active} overview={overview} transactions={transactions} onVerify={() => session ? setVerifyOpen(true) : setAuthOpen(true)} />}
+      {active !== "Overview" && <SectionView active={active} overview={overview} transactions={transactions} onVerify={() => session ? setVerifyOpen(true) : setAuthOpen(true)} onCreateGoal={() => session ? setGoalOpen(true) : setAuthOpen(true)} />}
       {loading && <div className="loading">Updating your dashboard…</div>}
     </main>
     {authOpen && <AuthModal onClose={() => setAuthOpen(false)} onSuccess={(value) => { localStorage.setItem("earntracker-session", JSON.stringify(value)); setSession(value); setAuthOpen(false); setNotice(`Welcome, ${value.name}. Your account is connected.`); }} />}
-    {verifyOpen && session && <VerifyModal token={session.token} onClose={() => setVerifyOpen(false)} />}
+    {verifyOpen && session && <VerifyModal token={session.token} onClose={() => setVerifyOpen(false)} onPaymentRecorded={refreshOverview} />}
+    {goalOpen && session && <GoalModal token={session.token} onClose={() => setGoalOpen(false)} onCreated={async () => { await refreshOverview(); setGoalOpen(false); setNotice("Your new financial goal is ready."); }} />}
   </div>;
 }
 
@@ -107,11 +127,46 @@ function Chart() { return <div className="chart"><div className="axis"><span>$3k
 
 function TransactionTable({ transactions }: { transactions: (Transaction & { source: string })[] }) { return <div className="table-wrap"><table><thead><tr><th>Payment</th><th>Source</th><th>Date</th><th>Status</th><th>Amount</th></tr></thead><tbody>{transactions.length ? transactions.map((item) => <tr key={item.id}><td><span className="payment-icon">{item.source.slice(0, 1)}</span><span><strong>{item.description || "Payment received"}</strong><small>{item.externalId}</small></span></td><td>{item.source}</td><td>{new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(item.occurredAt))}</td><td><span className="status">● {item.status}</span></td><td><strong>{money(item.amount - item.fee, item.currency)}</strong><small className="fee">Fee {money(item.fee, item.currency)}</small></td></tr>) : <tr><td colSpan={5} className="empty">No payments yet.</td></tr>}</tbody></table></div>; }
 
-function SectionView({ active, overview, transactions, onVerify }: { active: string; overview: Overview; transactions: (Transaction & {source: string})[]; onVerify: () => void }) {
+function SectionView({ active, overview, transactions, onVerify, onCreateGoal }: { active: string; overview: Overview; transactions: (Transaction & {source: string})[]; onVerify: () => void; onCreateGoal: () => void }) {
   if (active === "Transactions") return <section className="card page-card"><CardHead title="All transactions" action="Export CSV"/><TransactionTable transactions={transactions}/></section>;
   if (active === "Earnings") return <section className="source-grid">{overview.incomeSources.map((source) => <article className="card source-card" key={source.id}><span className="source-logo">{source.name[0]}</span><div><small>{source.provider}</small><h3>{source.name}</h3><p>{source.transactions.length} payments</p></div><strong>{money(source.transactions.reduce((sum, item) => sum + item.amount - item.fee, 0), source.currency)}</strong></article>)}</section>;
-  if (active === "Goals") return <section className="source-grid">{overview.financialGoals.map((item) => <article className="card source-card" key={item.id}><span className="source-logo">◎</span><div><small>Ends {item.targetDate}</small><h3>{item.name}</h3><p>{Math.round(item.progressPercentage)}% complete</p></div><strong>{money(item.currentAmount, item.currency)} / {money(item.targetAmount, item.currency)}</strong></article>)}</section>;
+  if (active === "Goals") return <GoalsView goals={overview.financialGoals} onCreate={onCreateGoal} />;
   return <section className="connections"><div className="connection-intro"><p className="eyebrow">PAYMENT CONNECTIONS</p><h2>Test a payment from start to finish.</h2><p>Create a PayPal Sandbox order, approve it as a test buyer, and capture it. You can also check Paystack payments.</p><button className="primary" onClick={onVerify}>Start a payment</button></div>{["PayPal", "Paystack"].map((name) => <article className="card connection" key={name}><span className={`provider ${name.toLowerCase()}`}>{name === "PayPal" ? "P" : "P₦"}</span><div><h3>{name}</h3><p>{name === "PayPal" ? "Create, approve and capture test orders" : "Check a transaction reference"}</p></div><span className="connected">● Available</span></article>)}</section>;
+}
+
+function GoalsView({ goals, onCreate }: { goals: Goal[]; onCreate: () => void }) {
+  const activeGoals = goals.filter((goal) => goal.status === "Active");
+  const achievedGoals = goals.filter((goal) => goal.status === "Achieved");
+  const expiredGoals = goals.filter((goal) => goal.status === "Expired");
+
+  const group = (title: string, items: Goal[]) => <section className="goal-group"><div className="goal-group-head"><h2>{title}</h2><span>{items.length}</span></div>{items.length ? <div className="source-grid">{items.map((item) => <article className={`card source-card goal-item ${item.status.toLowerCase()}`} key={item.id}><span className="source-logo">{item.isAchieved ? "✓" : "◎"}</span><div><small>{item.status} · {item.startDate} to {item.targetDate}</small><h3>{item.name}</h3><div className="goal-progress"><i style={{ width: `${item.progressPercentage}%` }} /></div><p>{Math.round(item.progressPercentage)}% complete</p></div><strong>{money(item.currentAmount, item.currency)} / {money(item.targetAmount, item.currency)}</strong></article>)}</div> : <div className="card goal-empty">No {title.toLowerCase()}.</div>}</section>;
+
+  return <div className="goals-page"><div className="goals-toolbar"><div><p className="eyebrow">FINANCIAL TARGETS</p><h2>Turn every payment into progress.</h2></div><button className="primary" onClick={onCreate}>+ New goal</button></div>{group("Active goals", activeGoals)}{group("Achieved goals", achievedGoals)}{expiredGoals.length > 0 && group("Expired goals", expiredGoals)}</div>;
+}
+
+function GoalModal({ token, onClose, onCreated }: { token: string; onClose: () => void; onCreated: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const today = new Date();
+  const target = new Date(today);
+  target.setDate(target.getDate() + 30);
+  const startDate = today.toISOString().slice(0, 10);
+  const targetDate = target.toISOString().slice(0, 10);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy(true); setError("");
+    const data = new FormData(event.currentTarget);
+    try {
+      await api.createGoal({ name: String(data.get("name")), targetAmount: Number(data.get("targetAmount")), currency: String(data.get("currency")), startDate: String(data.get("startDate")), targetDate: String(data.get("targetDate")) }, token);
+      await onCreated();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not create this goal.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <div className="modal-backdrop" onMouseDown={onClose}><div className="modal" onMouseDown={(event) => event.stopPropagation()}><button className="modal-close" onClick={onClose}>×</button><span className="brand-mark">◎</span><h2>Set a new goal</h2><p>Your completed earnings during this date range will update the goal automatically.</p><form onSubmit={submit}><label>Goal name<input name="name" required minLength={2} maxLength={100} placeholder="September income goal" /></label><div className="form-row"><label>Target amount<input name="targetAmount" type="number" min="0.01" max="1000000000" step="0.01" required /></label><label>Currency<input name="currency" minLength={3} maxLength={3} pattern="[A-Za-z]{3}" defaultValue="USD" required /></label></div><div className="form-row"><label>Start date<input name="startDate" type="date" defaultValue={startDate} required /></label><label>Target date<input name="targetDate" type="date" defaultValue={targetDate} min={startDate} required /></label></div>{error && <p className="form-error">{error}</p>}<button className="primary" disabled={busy}>{busy ? "Creating…" : "Create goal"}</button></form></div></div>;
 }
 
 function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (session: AuthSession) => void }) {
@@ -120,7 +175,7 @@ function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (se
   return <div className="modal-backdrop" onMouseDown={onClose}><div className="modal" onMouseDown={(e) => e.stopPropagation()}><button className="modal-close" onClick={onClose}>×</button><span className="brand-mark">E</span><h2>{mode === "login" ? "Welcome back" : "Create your account"}</h2><p>{mode === "login" ? "Sign in to see your live earnings." : "Start keeping all your earnings in one view."}</p><form onSubmit={submit}>{mode === "register" && <label>Your name<input name="name" required minLength={2} placeholder="Opeyemi Ade" /></label>}<label>Email address<input name="email" type="email" required placeholder="you@example.com" /></label><label>Password<input name="password" type="password" required minLength={8} maxLength={12} placeholder="8–12 characters" /></label>{error && <p className="form-error">{error}</p>}<button className="primary" disabled={busy}>{busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}</button></form><button className="switch" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }}>{mode === "login" ? "New here? Create an account" : "Already have an account? Sign in"}</button></div></div>;
 }
 
-function VerifyModal({ token, onClose }: { token: string; onClose: () => void }) {
+function VerifyModal({ token, onClose, onPaymentRecorded }: { token: string; onClose: () => void; onPaymentRecorded: () => Promise<void> }) {
   const [provider, setProvider] = useState<"paypal" | "paystack" | "capture">("paypal");
   const [orderId, setOrderId] = useState("");
   const [approvalUrl, setApprovalUrl] = useState("");
@@ -151,14 +206,14 @@ function VerifyModal({ token, onClose }: { token: string; onClose: () => void })
 
   async function captureOrder() {
     setBusy(true); setResult("");
-    try { const order = await api.capturePayPalOrder(orderId, token); setOrderStatus(order.status); setResult(order.status === "COMPLETED" ? "Payment captured successfully." : `Order status: ${order.status}.`); }
+    try { const order = await api.capturePayPalOrder(orderId, token); setOrderStatus(order.status); if (order.status === "COMPLETED") await onPaymentRecorded(); setResult(order.status === "COMPLETED" ? "Payment captured and added to your dashboard." : `Order status: ${order.status}.`); }
     catch (error) { showError(error); } finally { setBusy(false); }
   }
 
   async function verifyReference(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setResult("");
     const reference = String(new FormData(event.currentTarget).get("reference"));
-    try { await api.verify(provider === "capture" ? "paypal" : "paystack", reference, token); setResult("Payment found successfully."); }
+    try { await api.verify(provider === "capture" ? "paypal" : "paystack", reference, token); if (provider === "capture") await onPaymentRecorded(); setResult(provider === "capture" ? "Payment found and added to your dashboard." : "Payment found successfully."); }
     catch (error) { showError(error); } finally { setBusy(false); }
   }
 

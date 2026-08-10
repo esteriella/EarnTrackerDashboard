@@ -31,6 +31,38 @@ public sealed class LibraryController(IUnitOfWork unitOfWork) : ControllerBase
             goals.Select(goal => MapGoal(goal, transactions)).ToList()));
     }
 
+    /// <summary>Creates a financial goal for the signed-in user.</summary>
+    [HttpPost("goals")]
+    public async Task<ActionResult<FinancialGoalResponse>> CreateGoal(
+        [FromBody] CreateFinancialGoalDto request,
+        CancellationToken cancellationToken)
+    {
+        var userId = User.GetUserId();
+        var goal = new FinancialGoal
+        {
+            UserId = userId,
+            Name = request.Name.Trim(),
+            TargetAmount = request.TargetAmount,
+            Currency = request.Currency.Trim().ToUpperInvariant(),
+            StartDate = request.StartDate,
+            TargetDate = request.TargetDate
+        };
+
+        await unitOfWork.Library.AddFinancialGoalAsync(goal, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        var incomeSources = await unitOfWork.Library.GetIncomeSourcesAsync(
+            userId,
+            cancellationToken);
+        var transactions = incomeSources
+            .SelectMany(source => source.Transactions)
+            .ToList();
+
+        return CreatedAtAction(
+            nameof(GetOverview),
+            MapGoal(goal, transactions));
+    }
+
     private static IReadOnlyList<EarningsTotalResponse> CreateTotals(
         IEnumerable<EarningTransaction> transactions)
     {
@@ -73,6 +105,9 @@ public sealed class LibraryController(IUnitOfWork unitOfWork) : ControllerBase
     {
         var currentAmount = transactions
             .Where(transaction =>
+                transaction.Status.Equals(
+                    "Completed",
+                    StringComparison.OrdinalIgnoreCase) &&
                 transaction.Currency.Equals(
                     goal.Currency,
                     StringComparison.OrdinalIgnoreCase) &&
@@ -82,6 +117,12 @@ public sealed class LibraryController(IUnitOfWork unitOfWork) : ControllerBase
         var percentage = goal.TargetAmount <= 0
             ? 0
             : Math.Min(100, Math.Round(currentAmount / goal.TargetAmount * 100, 2));
+        var isAchieved = currentAmount >= goal.TargetAmount;
+        var status = isAchieved
+            ? "Achieved"
+            : goal.TargetDate < DateOnly.FromDateTime(DateTime.UtcNow)
+                ? "Expired"
+                : "Active";
 
         return new FinancialGoalResponse(
             goal.Id,
@@ -91,6 +132,8 @@ public sealed class LibraryController(IUnitOfWork unitOfWork) : ControllerBase
             percentage,
             goal.Currency,
             goal.StartDate,
-            goal.TargetDate);
+            goal.TargetDate,
+            status,
+            isAchieved);
     }
 }

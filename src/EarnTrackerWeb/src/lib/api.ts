@@ -34,6 +34,8 @@ export type Goal = {
   currency: string;
   startDate: string;
   targetDate: string;
+  status: "Active" | "Achieved" | "Expired";
+  isAchieved: boolean;
 };
 
 export type Overview = {
@@ -67,7 +69,15 @@ async function request<T>(path: string, options: RequestInit = {}, token?: strin
 
   if (!response.ok) {
     const body = await response.json().catch(() => null);
-    throw new Error(body?.detail ?? body?.title ?? "Something went wrong. Please try again.");
+    const validationMessage = body?.errors
+      ? Object.values(body.errors).flat().filter((item): item is string => typeof item === "string").join(" ")
+      : "";
+    const fallback = response.status === 401
+      ? "Your session has expired. Please sign in again."
+      : response.status === 404
+        ? "This API endpoint is not available. Stop and restart the backend, then try again."
+        : `Request failed with status ${response.status}. Please try again.`;
+    throw new Error(body?.detail || validationMessage || body?.title || fallback);
   }
   return response.json();
 }
@@ -78,6 +88,11 @@ export const api = {
   register: (name: string, email: string, password: string) =>
     request<AuthSession>("/api/auth/register", { method: "POST", body: JSON.stringify({ name, email, password }) }),
   overview: (token: string) => request<Overview>("/api/library/overview", {}, token),
+  createGoal: (goal: { name: string; targetAmount: number; currency: string; startDate: string; targetDate: string }, token: string) =>
+    request<Goal>("/api/library/goals", {
+      method: "POST",
+      body: JSON.stringify(goal),
+    }, token),
   createPayPalOrder: (amount: number, currency: string, description: string, token: string) =>
     request<PayPalOrder>("/api/integrations/paypal/orders", {
       method: "POST",

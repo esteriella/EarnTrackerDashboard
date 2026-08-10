@@ -14,6 +14,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ICacheService, CacheService>();
         services.AddSingleton<IJwtService, JwtService>();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IPaymentRecordingService, PaymentRecordingService>();
         services.AddScoped<IAuthRepository, AuthRepository>();
         services.AddScoped<ILibraryRepository, LibraryRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
