@@ -7,6 +7,7 @@ type RouteContext = { params: Promise<{ path: string[] }> };
 function apiBaseUrl() {
   return (
     process.env.EARNTRACKER_API_URL ??
+    process.env.NEXT_PUBLIC_API_BASE_URL ??
     process.env.NEXT_PUBLIC_API_URL ??
     "http://localhost:5048"
   ).replace(/\/$/, "");
