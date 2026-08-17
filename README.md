@@ -353,6 +353,45 @@ PayStack__ClientSecret
 
 Inside a container, PostgreSQL is normally not `localhost`; use its service hostname or `host.docker.internal` as appropriate.
 
+## Deploying the backend to Render
+
+Create the PostgreSQL database and backend web service in the same Render region. For the web service use:
+
+| Render setting | Value |
+| --- | --- |
+| Runtime | Docker |
+| Root Directory | `src/EarnTrackerApi` |
+| Dockerfile Path | `Dockerfile` |
+| Health Check Path | `/health` |
+
+On the Render PostgreSQL **Connect** page, copy the **Internal Database URL** and add it to the web service:
+
+```text
+DATABASE_URL=postgresql://user:password@internal-host:5432/database
+```
+
+The API converts Render's URL format to an Npgsql connection string. `DATABASE_URL` takes priority over the local `ConnectionStrings:DefaultConnection` setting. Do not use the local `localhost` connection string on Render.
+
+Add these web-service environment variables:
+
+```text
+ASPNETCORE_ENVIRONMENT=Production
+ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
+DATABASE_URL=<Render Internal Database URL>
+Jwt__Key=<random secret of at least 32 bytes>
+Jwt__Issuer=EarnTrackerApi
+Jwt__Audience=EarnTrackerWeb
+HashHelper__SecretKey=<different random secret of at least 32 bytes>
+PayPal__ClientId=<sandbox client ID>
+PayPal__ClientSecret=<sandbox client secret>
+PayStack__ClientSecret=<Paystack test secret>
+AllowedOrigins__0=https://YOUR-FRONTEND.onrender.com
+```
+
+Render supplies `PORT`; the API automatically binds to `http://0.0.0.0:$PORT`. On deployment, startup applies pending EF migrations to the Render database before accepting requests.
+
+Use Render's internal database URL for the Render-hosted API. The external URL is intended for clients outside Render and normally requires SSL.
+
 ## Troubleshooting
 
 ### `ERR_PNPM_NO_PKG_MANIFEST`

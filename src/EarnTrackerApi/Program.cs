@@ -4,6 +4,12 @@ using Microsoft.AspNetCore.DataProtection;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var renderPort = Environment.GetEnvironmentVariable("PORT");
+if (int.TryParse(renderPort, out var port))
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+}
+
 HashHelperSettings.Configure(builder.Configuration);
 
 if (builder.Environment.IsDevelopment())
@@ -11,9 +17,11 @@ if (builder.Environment.IsDevelopment())
     builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider();
 }
 
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+var configuredDatabase = Environment.GetEnvironmentVariable("DATABASE_URL")
+    ?? builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException(
-        "Connection string 'DefaultConnection' is not configured.");
+        "DATABASE_URL or connection string 'DefaultConnection' is required.");
+var connectionString = PostgresConnectionString.Normalize(configuredDatabase);
 
 Logging.Main(builder);
 builder.AddJwt();
