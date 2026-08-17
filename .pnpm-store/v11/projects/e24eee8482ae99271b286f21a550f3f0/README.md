@@ -41,12 +41,12 @@ Import the repository into Vercel and use these project settings:
 Add this environment variable for Production, Preview, and Development:
 
 ```text
-NEXT_PUBLIC_API_URL=https://your-api-domain.example.com
+EARNTRACKER_API_URL=https://your-api-name.onrender.com
 ```
 
-The value must be the public HTTPS address of the deployed EarnTracker API. Do not use `localhost` in Vercel.
+The value must be the public HTTPS address of the deployed EarnTracker API. Do not use `localhost` in Vercel. Redeploy after changing the variable.
 
-The API must also allow the Vercel site in its `AllowedOrigins` setting. Add the exact production address, for example:
+Browser requests go through the frontend's same-origin API bridge, so sign-in does not depend on browser CORS. If another browser client calls the API directly, add its exact address to the API's `AllowedOrigins` setting.
 
 ```json
 "AllowedOrigins": ["https://earn-tracker.example.com"]

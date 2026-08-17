@@ -54,4 +54,4 @@ jobs:
       - name: Build application
         run: pnpm build
         env:
-          NEXT_PUBLIC_API_URL: https://api.example.com
+          EARNTRACKER_API_URL: https://api.example.com

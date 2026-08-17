@@ -55,7 +55,9 @@ export type PayPalOrder = {
   }>;
 };
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5048";
+// Keep browser requests on the frontend origin. The server bridge forwards
+// them to Render, avoiding browser CORS and mixed-content failures.
+const API_URL = "/api/backend";
 
 async function request<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
