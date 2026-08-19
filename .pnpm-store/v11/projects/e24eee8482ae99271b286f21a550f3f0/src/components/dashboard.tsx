@@ -115,7 +115,7 @@ export function Dashboard() {
         <div className="header-actions"><button className="icon-button" aria-label="Notifications">♢<span /></button><button className="primary payment-button" onClick={() => session ? setVerifyOpen(true) : setAuthOpen(true)}>{session ? "+ Payment" : "Sign in"}</button></div>
         <div className="mobile-account">
           <button className="mobile-account-trigger" aria-label="Open account menu" aria-expanded={mobileAccountOpen} onClick={() => setMobileAccountOpen((open) => !open)}><span className="avatar">{displayName.slice(0, 2).toUpperCase()}</span><span className="account-chevron">⌄</span></button>
-          {mobileAccountOpen && <div className="mobile-account-menu"><div><strong>{displayName}</strong><small>{session ? session.tag || "Signed in" : "Preview account"}</small></div>{session ? <><button onClick={() => { setVerifyOpen(true); setMobileAccountOpen(false); }}>Add payment</button><button className="signout-button" onClick={signOut}>Sign out</button></> : <button onClick={() => { setAuthOpen(true); setMobileAccountOpen(false); }}>Sign in</button>}</div>}
+          {mobileAccountOpen && <div className="mobile-account-menu"><div><strong>{displayName}</strong><small>{session ? "Signed in" : "Preview account"}</small></div>{session ? <><button onClick={() => { setVerifyOpen(true); setMobileAccountOpen(false); }}>Add payment</button><button className="signout-button" onClick={signOut}>Sign out</button></> : <button onClick={() => { setAuthOpen(true); setMobileAccountOpen(false); }}>Sign in</button>}</div>}
         </div>
       </header>
       {notice && <div className="notice"><span>{notice}</span><button onClick={() => setNotice("")}>×</button></div>}
