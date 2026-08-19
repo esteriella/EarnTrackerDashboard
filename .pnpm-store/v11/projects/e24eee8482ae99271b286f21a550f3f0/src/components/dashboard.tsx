@@ -43,6 +43,7 @@ export function Dashboard() {
   const [notice, setNotice] = useState("");
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [goalOpen, setGoalOpen] = useState(false);
+  const [mobileAccountOpen, setMobileAccountOpen] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem("earntracker-session");
@@ -81,12 +82,12 @@ export function Dashboard() {
     ?? overview.financialGoals.find((item) => item.status === "Achieved");
   const displayName = session?.name || "Opeyemi";
 
-  function signOut() { localStorage.removeItem("earntracker-session"); setSession(null); setOverview(demoOverview); setNotice("You have signed out."); }
+  function signOut() { localStorage.removeItem("earntracker-session"); setSession(null); setOverview(demoOverview); setMobileAccountOpen(false); setNotice("You have signed out."); }
 
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand"><span className="brand-mark">E</span><span>EarnTracker</span></div>
-      <nav>{nav.map((item) => <button key={item} onClick={() => setActive(item)} className={active === item ? "active" : ""}><Icon name={item}/><span>{item}</span></button>)}</nav>
+      <nav aria-label="Main navigation">{nav.map((item) => <button key={item} onClick={() => { setActive(item); setMobileAccountOpen(false); }} className={active === item ? "active" : ""} aria-current={active === item ? "page" : undefined}><Icon name={item}/><span>{item === "Transactions" ? <><span className="desktop-label">Transactions</span><span className="mobile-label">Activity</span></> : item}</span></button>)}</nav>
       <div className="sidebar-foot">
         <div className="help-card"><span>?</span><strong>Need a hand?</strong><p>Find quick answers and guides.</p><button>Visit help centre</button></div>
         <button className="profile" onClick={() => session ? signOut() : setAuthOpen(true)}><span className="avatar">{displayName.slice(0, 2).toUpperCase()}</span><span><strong>{displayName}</strong><small>{session ? "Sign out" : "Sign in to sync"}</small></span><b>⋮</b></button>
@@ -94,7 +95,14 @@ export function Dashboard() {
     </aside>
 
     <main className="main">
-      <header><div><button className="mobile-brand" aria-label="Menu">E</button><p>{session ? "Your workspace" : "Preview workspace"}</p><h1>{active}</h1></div><div className="header-actions"><button className="icon-button" aria-label="Notifications">♢<span /></button><button className="primary" onClick={() => session ? setVerifyOpen(true) : setAuthOpen(true)}>{session ? "+ Payment" : "Sign in"}</button></div></header>
+      <header className="app-header">
+        <div className="header-title"><span className="mobile-brand" aria-hidden="true">E</span><div><p>{session ? "Your workspace" : "Preview workspace"}</p><h1>{active}</h1></div></div>
+        <div className="header-actions"><button className="icon-button" aria-label="Notifications">♢<span /></button><button className="primary payment-button" onClick={() => session ? setVerifyOpen(true) : setAuthOpen(true)}>{session ? "+ Payment" : "Sign in"}</button></div>
+        <div className="mobile-account">
+          <button className="mobile-account-trigger" aria-label="Open account menu" aria-expanded={mobileAccountOpen} onClick={() => setMobileAccountOpen((open) => !open)}><span className="avatar">{displayName.slice(0, 2).toUpperCase()}</span><span className="account-chevron">⌄</span></button>
+          {mobileAccountOpen && <div className="mobile-account-menu"><div><strong>{displayName}</strong><small>{session ? session.tag || "Signed in" : "Preview account"}</small></div>{session ? <><button onClick={() => { setVerifyOpen(true); setMobileAccountOpen(false); }}>Add payment</button><button className="signout-button" onClick={signOut}>Sign out</button></> : <button onClick={() => { setAuthOpen(true); setMobileAccountOpen(false); }}>Sign in</button>}</div>}
+        </div>
+      </header>
       {notice && <div className="notice"><span>{notice}</span><button onClick={() => setNotice("")}>×</button></div>}
 
       {active === "Overview" && <>
