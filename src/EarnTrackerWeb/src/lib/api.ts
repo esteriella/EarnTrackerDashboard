@@ -65,6 +65,13 @@ export type PayStackInitialization = {
   };
 };
 
+export type PayStackVerification = {
+  status: boolean;
+  message: string;
+  earntracker_recorded: boolean;
+  data?: { status?: string; reference?: string; currency?: string; amount?: number };
+};
+
 // Keep browser requests on the frontend origin. The server bridge forwards
 // them to Render, avoiding browser CORS and mixed-content failures.
 const API_URL = "/api/backend";
@@ -127,7 +134,7 @@ export const api = {
       body: JSON.stringify(payment),
     }, token),
   verify: (provider: "paypal" | "paystack", reference: string, token: string) =>
-    request<Record<string, unknown>>(
+    request<Record<string, unknown> | PayStackVerification>(
       provider === "paypal"
         ? `/api/integrations/paypal/captures/${encodeURIComponent(reference)}`
         : `/api/integrations/paystack/transactions/${encodeURIComponent(reference)}`,

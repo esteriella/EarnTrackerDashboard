@@ -204,7 +204,7 @@ Initialize a test transaction in Scalar:
   "amount": 1000,
   "currency": "NGN",
   "description": "Paystack Scalar test",
-  "callbackUrl": "http://localhost:3000"
+  "callbackUrl": "http://localhost:3000/?payment=paystack"
 }
 ```
 
@@ -220,9 +220,27 @@ CVV: 408
 
 ### `GET /api/integrations/paystack/transactions/{reference}`
 
-After checkout succeeds, paste the saved reference into this route. A successful transaction initialized by the same signed-in EarnTracker user is recorded in dashboard earnings. Repeating verification updates the existing entry instead of creating a duplicate.
+After checkout succeeds, Paystack appends `reference` and `trxref` to the callback URL. The frontend detects this return, reopens the Paystack payment panel, and restores the reference for verification.
 
-Finally call `GET /api/library/overview` and look for the `Paystack` income source. Transactions not initialized through EarnTracker are returned by Paystack but are not imported, because they are not bound to the current user.
+Paste that reference into this route when testing with Scalar. A successful transaction initialized by the same signed-in EarnTracker user is recorded in dashboard earnings. Repeating verification updates the existing entry instead of creating a duplicate. The response includes:
+
+```json
+{
+  "status": true,
+  "message": "Verification successful",
+  "data": {
+    "status": "success",
+    "reference": "ET-...",
+    "currency": "NGN",
+    "amount": 100000
+  },
+  "earntracker_recorded": true
+}
+```
+
+`earntracker_recorded` must be `true` before the frontend reports that the earning was added.
+
+Finally call `GET /api/library/overview` and look for the `Paystack` income source. Totals are grouped by currency: NGN earnings increase the NGN total and are never incorrectly added to USD. The frontend switches to the verified currency and shows a currency selector when more than one is present. Transactions not initialized through EarnTracker are returned by Paystack but are not imported, because they are not bound to the current user.
 
 ## Status codes
 

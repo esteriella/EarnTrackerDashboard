@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using EarnTrackerApi.Dtos.IntegrationDto;
 using EarnTrackerApi.Extensions;
 using EarnTrackerApi.Interfaces;
@@ -106,17 +107,20 @@ public sealed class IntegrationsController(
     }
 
     [HttpGet("paystack/transactions/{reference}")]
-    public async Task<ActionResult<JsonElement>> VerifyPayStackTransaction(
+    public async Task<ActionResult<JsonObject>> VerifyPayStackTransaction(
         string reference,
         CancellationToken cancellationToken)
     {
         using var response = await payStack.VerifyTransactionAsync(
             reference,
             cancellationToken);
-        await paymentRecorder.RecordPayStackTransactionAsync(
+        var recorded = await paymentRecorder.RecordPayStackTransactionAsync(
             User.GetUserId(),
             response.RootElement,
             cancellationToken);
-        return Ok(response.RootElement.Clone());
+        var result = JsonNode.Parse(response.RootElement.GetRawText())?.AsObject()
+            ?? new JsonObject();
+        result["earntracker_recorded"] = recorded;
+        return Ok(result);
     }
 }

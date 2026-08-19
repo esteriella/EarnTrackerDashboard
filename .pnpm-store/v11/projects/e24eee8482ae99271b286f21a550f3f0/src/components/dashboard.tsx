@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { api, AuthSession, Goal, Overview, Transaction } from "@/lib/api";
+import { api, AuthSession, Goal, Overview, PayStackVerification, Transaction } from "@/lib/api";
 
 const demoOverview: Overview = {
   totals: [{ currency: "USD", gross: 12450, fees: 608, net: 11842 }],
@@ -44,21 +44,33 @@ export function Dashboard() {
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [goalOpen, setGoalOpen] = useState(false);
   const [mobileAccountOpen, setMobileAccountOpen] = useState(false);
+  const [selectedCurrency, setSelectedCurrency] = useState("USD");
+  const [returnedPaystackReference, setReturnedPaystackReference] = useState("");
 
   useEffect(() => {
     const stored = localStorage.getItem("earntracker-session");
     if (!stored) return;
     try {
       const savedSession = JSON.parse(stored);
-      queueMicrotask(() => setSession(savedSession));
+      const query = new URLSearchParams(window.location.search);
+      const paystackReference = query.get("reference") ?? query.get("trxref");
+      queueMicrotask(() => {
+        setSession(savedSession);
+        if (query.get("payment") === "paystack" && paystackReference) {
+          setReturnedPaystackReference(paystackReference);
+          setActive("Connections");
+          setVerifyOpen(true);
+        }
+      });
     } catch { localStorage.removeItem("earntracker-session"); }
   }, []);
 
-  const refreshOverview = useCallback(async () => {
+  const refreshOverview = useCallback(async (preferredCurrency?: string) => {
     if (!session) return;
     setLoading(true);
     try {
       setOverview(await api.overview(session.token));
+      if (preferredCurrency) setSelectedCurrency(preferredCurrency.toUpperCase());
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not update the dashboard.");
     } finally {
@@ -77,12 +89,15 @@ export function Dashboard() {
   }, [session]);
 
   const transactions = useMemo(() => overview.incomeSources.flatMap((source) => source.transactions.map((item) => ({ ...item, source: source.name }))).sort((a, b) => +new Date(b.occurredAt) - +new Date(a.occurredAt)), [overview]);
-  const total = overview.totals[0] ?? { currency: "USD", gross: 0, fees: 0, net: 0 };
+  const total = overview.totals.find((item) => item.currency === selectedCurrency)
+    ?? overview.totals[0]
+    ?? { currency: "USD", gross: 0, fees: 0, net: 0 };
   const goal = overview.financialGoals.find((item) => item.status === "Active")
     ?? overview.financialGoals.find((item) => item.status === "Achieved");
   const displayName = session?.name || "Opeyemi";
 
   function signOut() { localStorage.removeItem("earntracker-session"); setSession(null); setOverview(demoOverview); setMobileAccountOpen(false); setNotice("You have signed out."); }
+  function closePaymentModal() { setVerifyOpen(false); setReturnedPaystackReference(""); if (window.location.search) window.history.replaceState({}, "", window.location.pathname); }
 
   return <div className="app-shell">
     <aside className="sidebar">
@@ -106,7 +121,7 @@ export function Dashboard() {
       {notice && <div className="notice"><span>{notice}</span><button onClick={() => setNotice("")}>×</button></div>}
 
       {active === "Overview" && <>
-        <section className="welcome"><div><p className="eyebrow">FRIDAY, 7 AUGUST</p><h2>Good evening, {displayName.split(" ")[0]} <span>✦</span></h2><p>Here&apos;s how your earnings are looking today.</p></div><div className="period"><button className="selected">This month</button><button>This year</button></div></section>
+        <section className="welcome"><div><p className="eyebrow">FRIDAY, 7 AUGUST</p><h2>Good evening, {displayName.split(" ")[0]} <span>✦</span></h2><p>Here&apos;s how your earnings are looking today.</p></div>{overview.totals.length > 0 && <div className="period currency-picker" aria-label="Displayed currency">{overview.totals.map((item) => <button key={item.currency} className={item.currency === total.currency ? "selected" : ""} onClick={() => setSelectedCurrency(item.currency)}>{item.currency}</button>)}</div>}</section>
         <section className="stats">
           <Stat label="Net earnings" value={money(total.net, total.currency)} change="12.4%" good icon="↗" />
           <Stat label="Gross income" value={money(total.gross, total.currency)} change="8.2%" good icon="＋" />
@@ -124,7 +139,7 @@ export function Dashboard() {
       {loading && <div className="loading">Updating your dashboard…</div>}
     </main>
     {authOpen && <AuthModal onClose={() => setAuthOpen(false)} onSuccess={(value) => { localStorage.setItem("earntracker-session", JSON.stringify(value)); setSession(value); setAuthOpen(false); setNotice(`Welcome, ${value.name}. Your account is connected.`); }} />}
-    {verifyOpen && session && <VerifyModal token={session.token} onClose={() => setVerifyOpen(false)} onPaymentRecorded={refreshOverview} />}
+    {verifyOpen && session && <VerifyModal token={session.token} initialPaystackReference={returnedPaystackReference} onClose={closePaymentModal} onPaymentRecorded={refreshOverview} />}
     {goalOpen && session && <GoalModal token={session.token} onClose={() => setGoalOpen(false)} onCreated={async () => { await refreshOverview(); setGoalOpen(false); setNotice("Your new financial goal is ready."); }} />}
   </div>;
 }
@@ -183,13 +198,13 @@ function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (se
   return <div className="modal-backdrop" onMouseDown={onClose}><div className="modal" onMouseDown={(e) => e.stopPropagation()}><button className="modal-close" onClick={onClose}>×</button><span className="brand-mark">E</span><h2>{mode === "login" ? "Welcome back" : "Create your account"}</h2><p>{mode === "login" ? "Sign in to see your live earnings." : "Start keeping all your earnings in one view."}</p><form onSubmit={submit}>{mode === "register" && <label>Your name<input name="name" required minLength={2} placeholder="Opeyemi Ade" /></label>}<label>Email address<input name="email" type="email" required placeholder="you@example.com" /></label><label>Password<input name="password" type="password" required minLength={8} maxLength={12} placeholder="8–12 characters" /></label>{error && <p className="form-error">{error}</p>}<button className="primary" disabled={busy}>{busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}</button></form><button className="switch" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }}>{mode === "login" ? "New here? Create an account" : "Already have an account? Sign in"}</button></div></div>;
 }
 
-function VerifyModal({ token, onClose, onPaymentRecorded }: { token: string; onClose: () => void; onPaymentRecorded: () => Promise<void> }) {
-  const [advanced, setAdvanced] = useState(false);
-  const [provider, setProvider] = useState<"paypal" | "paystack" | "capture">("paypal");
+function VerifyModal({ token, initialPaystackReference, onClose, onPaymentRecorded }: { token: string; initialPaystackReference: string; onClose: () => void; onPaymentRecorded: (currency?: string) => Promise<void> }) {
+  const [advanced, setAdvanced] = useState(Boolean(initialPaystackReference));
+  const [provider, setProvider] = useState<"paypal" | "paystack" | "capture">(initialPaystackReference ? "paystack" : "paypal");
   const [orderId, setOrderId] = useState("");
   const [approvalUrl, setApprovalUrl] = useState("");
   const [orderStatus, setOrderStatus] = useState("");
-  const [paystackReference, setPaystackReference] = useState("");
+  const [paystackReference, setPaystackReference] = useState(initialPaystackReference);
   const [paystackUrl, setPaystackUrl] = useState("");
   const [result, setResult] = useState("");
   const [busy, setBusy] = useState(false);
@@ -202,8 +217,9 @@ function VerifyModal({ token, onClose, onPaymentRecorded }: { token: string; onC
     event.preventDefault(); setBusy(true); setResult("");
     const data = new FormData(event.currentTarget);
     try {
-      await api.createDemoPayment(Number(data.get("amount")), String(data.get("currency")), String(data.get("description")), token);
-      await onPaymentRecorded();
+      const currency = String(data.get("currency"));
+      await api.createDemoPayment(Number(data.get("amount")), currency, String(data.get("description")), token);
+      await onPaymentRecorded(currency);
       setResult("Demo payment added. Your totals and goals have been updated.");
     } catch (error) { showError(error); } finally { setBusy(false); }
   }
@@ -228,7 +244,7 @@ function VerifyModal({ token, onClose, onPaymentRecorded }: { token: string; onC
         amount: Number(data.get("amount")),
         currency: String(data.get("currency")),
         description: String(data.get("description")),
-        callbackUrl: window.location.origin,
+        callbackUrl: `${window.location.origin}/?payment=paystack`,
       }, token);
       setPaystackReference(response.data.reference);
       setPaystackUrl(response.data.authorization_url);
@@ -239,13 +255,17 @@ function VerifyModal({ token, onClose, onPaymentRecorded }: { token: string; onC
   async function verifyInitializedPaystack() {
     setBusy(true); setResult("");
     try {
-      const verification = await api.verify("paystack", paystackReference, token);
-      const data = verification.data as { status?: string } | undefined;
+      const verification = await api.verify("paystack", paystackReference, token) as PayStackVerification;
+      const data = verification.data;
       if (data?.status !== "success") {
         setResult(`Paystack status: ${data?.status ?? "not completed"}. Complete checkout before verifying again.`);
         return;
       }
-      await onPaymentRecorded();
+      if (!verification.earntracker_recorded) {
+        setResult("Paystack confirmed the payment, but it was not recorded for this account. Please create a new test from EarnTracker.");
+        return;
+      }
+      await onPaymentRecorded(data.currency);
       setResult("Paystack payment verified and added to your dashboard.");
     } catch (error) { showError(error); } finally { setBusy(false); }
   }
@@ -275,7 +295,7 @@ function VerifyModal({ token, onClose, onPaymentRecorded }: { token: string; onC
     <div className="provider-tabs"><button className={provider === "paypal" ? "selected" : ""} onClick={() => { setProvider("paypal"); setResult(""); }}>PayPal Sandbox</button><button className={provider === "paystack" ? "selected" : ""} onClick={() => { setProvider("paystack"); setResult(""); }}>Paystack</button><button className={provider === "capture" ? "selected" : ""} onClick={() => { setProvider("capture"); setResult(""); }}>PayPal capture</button></div>
     {provider === "paypal" ? <>
       {!orderId ? <form onSubmit={createOrder}><div className="form-row"><label>Amount<input name="amount" type="number" min="0.01" max="1000000" step="0.01" defaultValue="10.00" required /></label><label>Currency<input name="currency" minLength={3} maxLength={3} pattern="[A-Za-z]{3}" defaultValue="USD" required /></label></div><label>Description<input name="description" maxLength={127} defaultValue="Freelancer earnings tracker sandbox test" required /></label><button className="primary" disabled={busy}>{busy ? "Creating…" : "Create test order"}</button></form> : <div className="order-steps"><div className="order-summary"><span>Order</span><strong>{orderId}</strong><span className={`order-state ${orderStatus.toLowerCase()}`}>{orderStatus}</span></div><ol><li><strong>Approve the order</strong><span>Sign in with a PayPal Sandbox buyer account.</span>{approvalUrl && <a className="primary approval-link" href={approvalUrl} target="_blank" rel="noreferrer">Open PayPal Sandbox ↗</a>}</li><li><strong>Check approval</strong><span>Return here after approving the order.</span><button className="secondary" onClick={refreshOrder} disabled={busy}>Check order status</button></li><li><strong>Capture payment</strong><span>Capture once the order status is approved.</span><button className="primary" onClick={captureOrder} disabled={busy || orderStatus === "COMPLETED"}>{orderStatus === "COMPLETED" ? "Payment captured" : "Capture payment"}</button></li></ol><button className="switch" onClick={() => { setOrderId(""); setApprovalUrl(""); setOrderStatus(""); setResult(""); }}>Create another order</button></div>}
-    </> : provider === "paystack" ? <>{!paystackReference ? <form onSubmit={initializePaystack}><label>Test buyer email<input name="email" type="email" required placeholder="buyer@example.com" /></label><div className="form-row"><label>Amount<input name="amount" type="number" min="0.01" max="1000000" step="0.01" defaultValue="1000.00" required /></label><label>Currency<input name="currency" minLength={3} maxLength={3} pattern="[A-Za-z]{3}" defaultValue="NGN" required /></label></div><label>Description<input name="description" maxLength={120} defaultValue="Paystack test payment" required /></label><button className="primary" disabled={busy}>{busy ? "Creating…" : "Create Paystack test"}</button></form> : <div className="order-steps paystack-steps"><div className="order-summary"><span>Reference</span><strong>{paystackReference}</strong><span className="order-state">TEST</span></div><ol><li><strong>Open test checkout</strong><span>Use a Paystack test card. No real money will move.</span><a className="primary approval-link" href={paystackUrl} target="_blank" rel="noreferrer">Open Paystack checkout ↗</a></li><li><strong>Verify and record</strong><span>Return after checkout succeeds, then add it to your dashboard.</span><button className="primary" onClick={verifyInitializedPaystack} disabled={busy}>{busy ? "Verifying…" : "Verify payment"}</button></li></ol><button className="switch" onClick={() => { setPaystackReference(""); setPaystackUrl(""); setResult(""); }}>Create another Paystack test</button></div>}</> : <form onSubmit={verifyReference}><label>Capture ID<input name="reference" required placeholder="e.g. 5TY..."/></label><button className="primary" disabled={busy}>{busy ? "Checking…" : "Check payment"}</button></form>}</>}
+    </> : provider === "paystack" ? <>{!paystackReference ? <form onSubmit={initializePaystack}><label>Test buyer email<input name="email" type="email" required placeholder="buyer@example.com" /></label><div className="form-row"><label>Amount<input name="amount" type="number" min="0.01" max="1000000" step="0.01" defaultValue="1000.00" required /></label><label>Currency<input name="currency" minLength={3} maxLength={3} pattern="[A-Za-z]{3}" defaultValue="NGN" required /></label></div><label>Description<input name="description" maxLength={120} defaultValue="Paystack test payment" required /></label><button className="primary" disabled={busy}>{busy ? "Creating…" : "Create Paystack test"}</button></form> : <div className="order-steps paystack-steps"><div className="order-summary"><span>Reference</span><strong>{paystackReference}</strong><span className="order-state">TEST</span></div><ol><li><strong>{paystackUrl ? "Open test checkout" : "Checkout completed"}</strong><span>{paystackUrl ? "Use a Paystack test card. No real money will move." : "Paystack returned you to EarnTracker with this reference."}</span>{paystackUrl && <a className="primary approval-link" href={paystackUrl} target="_blank" rel="noreferrer">Open Paystack checkout ↗</a>}</li><li><strong>Verify and record</strong><span>Verify the successful payment and add it to your dashboard.</span><button className="primary" onClick={verifyInitializedPaystack} disabled={busy}>{busy ? "Verifying…" : "Verify payment"}</button></li></ol><button className="switch" onClick={() => { setPaystackReference(""); setPaystackUrl(""); setResult(""); }}>Create another Paystack test</button></div>}</> : <form onSubmit={verifyReference}><label>Capture ID<input name="reference" required placeholder="e.g. 5TY..."/></label><button className="primary" disabled={busy}>{busy ? "Checking…" : "Check payment"}</button></form>}</>}
     {result && <p className="form-result">{result}</p>}
     <button className="advanced-toggle" onClick={() => { setAdvanced((value) => !value); setResult(""); }}>{advanced ? "← Back to demo payment" : "Test with PayPal Sandbox or Paystack →"}</button>
   </div></div>;
