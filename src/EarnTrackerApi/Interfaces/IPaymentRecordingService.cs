@@ -11,6 +11,11 @@ public interface IPaymentRecordingService
         CreateDemoPaymentDto request,
         CancellationToken cancellationToken = default);
 
+    Task<bool> RecordPayStackTransactionAsync(
+        Guid userId,
+        JsonElement response,
+        CancellationToken cancellationToken = default);
+
     Task RecordPayPalCapturesAsync(
         Guid userId,
         JsonElement response,

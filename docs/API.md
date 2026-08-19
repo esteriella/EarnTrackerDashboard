@@ -27,7 +27,8 @@ In Scalar, choose **Authentication** → **Bearer** and paste only the EarnTrack
 | GET | `/api/integrations/paypal/orders/{orderId}` | Yes | Get order/import captures |
 | POST | `/api/integrations/paypal/orders/{orderId}/capture` | Yes | Capture and record earning |
 | GET | `/api/integrations/paypal/captures/{captureId}` | Yes | Get and record capture |
-| GET | `/api/integrations/paystack/transactions/{reference}` | Yes | Verify Paystack reference |
+| POST | `/api/integrations/paystack/transactions` | Yes | Initialize Paystack test checkout |
+| GET | `/api/integrations/paystack/transactions/{reference}` | Yes | Verify and record Paystack payment |
 
 ## Health
 
@@ -193,9 +194,35 @@ Gets a capture. A completed capture is inserted or updated for the authenticated
 
 ## Paystack
 
+### `POST /api/integrations/paystack/transactions`
+
+Initialize a test transaction in Scalar:
+
+```json
+{
+  "email": "buyer@example.com",
+  "amount": 1000,
+  "currency": "NGN",
+  "description": "Paystack Scalar test",
+  "callbackUrl": "http://localhost:3000"
+}
+```
+
+`amount` is entered in the main currency unit. The backend converts it to Paystack subunits. Copy `data.authorization_url` from the response into a browser, and save `data.reference` for verification.
+
+Complete checkout with Paystack test card details:
+
+```text
+Card: 4084 0840 8408 4081
+Expiry: any future date
+CVV: 408
+```
+
 ### `GET /api/integrations/paystack/transactions/{reference}`
 
-Returns Paystack's verification response. It does not currently save the transaction to dashboard earnings.
+After checkout succeeds, paste the saved reference into this route. A successful transaction initialized by the same signed-in EarnTracker user is recorded in dashboard earnings. Repeating verification updates the existing entry instead of creating a duplicate.
+
+Finally call `GET /api/library/overview` and look for the `Paystack` income source. Transactions not initialized through EarnTracker are returned by Paystack but are not imported, because they are not bound to the current user.
 
 ## Status codes
 

@@ -15,6 +15,19 @@ public sealed class IntegrationsController(
     IPayStackService payStack,
     IPaymentRecordingService paymentRecorder) : ControllerBase
 {
+    /// <summary>Initializes a Paystack test transaction and returns its checkout URL.</summary>
+    [HttpPost("paystack/transactions")]
+    public async Task<ActionResult<JsonElement>> InitializePayStackTransaction(
+        [FromBody] CreatePayStackTransactionDto request,
+        CancellationToken cancellationToken)
+    {
+        using var response = await payStack.InitializeTransactionAsync(
+            User.GetUserId(),
+            request,
+            cancellationToken);
+        return Ok(response.RootElement.Clone());
+    }
+
     /// <summary>Records a fictional payment for product demonstration only.</summary>
     [HttpPost("demo/payments")]
     public async Task<ActionResult> CreateDemoPayment(
@@ -99,6 +112,10 @@ public sealed class IntegrationsController(
     {
         using var response = await payStack.VerifyTransactionAsync(
             reference,
+            cancellationToken);
+        await paymentRecorder.RecordPayStackTransactionAsync(
+            User.GetUserId(),
+            response.RootElement,
             cancellationToken);
         return Ok(response.RootElement.Clone());
     }

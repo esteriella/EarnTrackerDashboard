@@ -12,6 +12,96 @@ public sealed class PaymentRecordingService(IUnitOfWork unitOfWork)
 {
     private const string Provider = "PayPal";
 
+    public async Task<bool> RecordPayStackTransactionAsync(
+        Guid userId,
+        JsonElement response,
+        CancellationToken cancellationToken = default)
+    {
+        if (!response.TryGetProperty("data", out var data) ||
+            !string.Equals(
+                ReadString(data, "status"),
+                "success",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (!data.TryGetProperty("metadata", out var metadata) ||
+            metadata.ValueKind != JsonValueKind.Object ||
+            !Guid.TryParse(ReadString(metadata, "earntracker_user_id"), out var ownerId) ||
+            ownerId != userId)
+        {
+            return false;
+        }
+
+        const string provider = "Paystack";
+        var reference = ReadRequiredString(data, "reference");
+        var currency = ReadRequiredString(data, "currency").ToUpperInvariant();
+        var source = await unitOfWork.Library.GetIncomeSourceAsync(
+            userId,
+            provider,
+            currency,
+            cancellationToken);
+
+        if (source is null)
+        {
+            source = new IncomeSource
+            {
+                UserId = userId,
+                Name = provider,
+                Provider = provider,
+                Currency = currency
+            };
+            await unitOfWork.Library.AddIncomeSourceAsync(source, cancellationToken);
+        }
+
+        var transaction = await unitOfWork.Library.GetTransactionAsync(
+            source.Id,
+            reference,
+            cancellationToken);
+        var amount = ReadNumber(data, "amount") / 100m;
+        var fee = data.TryGetProperty("fees", out var feeElement) &&
+            feeElement.ValueKind == JsonValueKind.Number
+                ? feeElement.GetDecimal() / 100m
+                : 0m;
+        var occurredAt = DateTimeOffset.UtcNow;
+        if (DateTimeOffset.TryParse(
+            ReadString(data, "paid_at"),
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal,
+            out var paidAt))
+        {
+            occurredAt = paidAt;
+        }
+
+        if (transaction is null)
+        {
+            transaction = new EarningTransaction
+            {
+                IncomeSourceId = source.Id,
+                ExternalId = reference,
+                Amount = amount,
+                Fee = fee,
+                Currency = currency,
+                Status = "Completed",
+                Description = ReadString(metadata, "description") ?? "Paystack payment",
+                OccurredAt = occurredAt
+            };
+            await unitOfWork.Library.AddTransactionAsync(transaction, cancellationToken);
+        }
+        else
+        {
+            transaction.Amount = amount;
+            transaction.Fee = fee;
+            transaction.Status = "Completed";
+            transaction.Description = ReadString(metadata, "description") ?? "Paystack payment";
+            transaction.OccurredAt = occurredAt;
+        }
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
     public async Task<EarningTransaction> RecordDemoPaymentAsync(
         Guid userId,
         CreateDemoPaymentDto request,
@@ -212,6 +302,20 @@ public sealed class PaymentRecordingService(IUnitOfWork unitOfWork)
                 : throw new ExternalServiceException(
                     Provider,
                     $"'{propertyName}' was not a valid amount.");
+    }
+
+    private static decimal ReadNumber(JsonElement parent, string propertyName)
+    {
+        if (parent.TryGetProperty(propertyName, out var value) &&
+            value.ValueKind == JsonValueKind.Number &&
+            value.TryGetDecimal(out var result))
+        {
+            return result;
+        }
+
+        throw new ExternalServiceException(
+            "Paystack",
+            $"The response did not contain a valid '{propertyName}'.");
     }
 
     private static string ReadRequiredString(JsonElement parent, string propertyName) =>

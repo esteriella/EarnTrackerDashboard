@@ -189,6 +189,8 @@ function VerifyModal({ token, onClose, onPaymentRecorded }: { token: string; onC
   const [orderId, setOrderId] = useState("");
   const [approvalUrl, setApprovalUrl] = useState("");
   const [orderStatus, setOrderStatus] = useState("");
+  const [paystackReference, setPaystackReference] = useState("");
+  const [paystackUrl, setPaystackUrl] = useState("");
   const [result, setResult] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -217,6 +219,37 @@ function VerifyModal({ token, onClose, onPaymentRecorded }: { token: string; onC
     } catch (error) { showError(error); } finally { setBusy(false); }
   }
 
+  async function initializePaystack(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy(true); setResult("");
+    const data = new FormData(event.currentTarget);
+    try {
+      const response = await api.initializePayStack({
+        email: String(data.get("email")),
+        amount: Number(data.get("amount")),
+        currency: String(data.get("currency")),
+        description: String(data.get("description")),
+        callbackUrl: window.location.origin,
+      }, token);
+      setPaystackReference(response.data.reference);
+      setPaystackUrl(response.data.authorization_url);
+      setResult("Test checkout created. Complete it in Paystack, then return here to verify.");
+    } catch (error) { showError(error); } finally { setBusy(false); }
+  }
+
+  async function verifyInitializedPaystack() {
+    setBusy(true); setResult("");
+    try {
+      const verification = await api.verify("paystack", paystackReference, token);
+      const data = verification.data as { status?: string } | undefined;
+      if (data?.status !== "success") {
+        setResult(`Paystack status: ${data?.status ?? "not completed"}. Complete checkout before verifying again.`);
+        return;
+      }
+      await onPaymentRecorded();
+      setResult("Paystack payment verified and added to your dashboard.");
+    } catch (error) { showError(error); } finally { setBusy(false); }
+  }
+
   async function refreshOrder() {
     setBusy(true); setResult("");
     try { const order = await api.getPayPalOrder(orderId, token); setOrderStatus(order.status); setResult(`Order status: ${order.status}.`); }
@@ -242,7 +275,7 @@ function VerifyModal({ token, onClose, onPaymentRecorded }: { token: string; onC
     <div className="provider-tabs"><button className={provider === "paypal" ? "selected" : ""} onClick={() => { setProvider("paypal"); setResult(""); }}>PayPal Sandbox</button><button className={provider === "paystack" ? "selected" : ""} onClick={() => { setProvider("paystack"); setResult(""); }}>Paystack</button><button className={provider === "capture" ? "selected" : ""} onClick={() => { setProvider("capture"); setResult(""); }}>PayPal capture</button></div>
     {provider === "paypal" ? <>
       {!orderId ? <form onSubmit={createOrder}><div className="form-row"><label>Amount<input name="amount" type="number" min="0.01" max="1000000" step="0.01" defaultValue="10.00" required /></label><label>Currency<input name="currency" minLength={3} maxLength={3} pattern="[A-Za-z]{3}" defaultValue="USD" required /></label></div><label>Description<input name="description" maxLength={127} defaultValue="Freelancer earnings tracker sandbox test" required /></label><button className="primary" disabled={busy}>{busy ? "Creating…" : "Create test order"}</button></form> : <div className="order-steps"><div className="order-summary"><span>Order</span><strong>{orderId}</strong><span className={`order-state ${orderStatus.toLowerCase()}`}>{orderStatus}</span></div><ol><li><strong>Approve the order</strong><span>Sign in with a PayPal Sandbox buyer account.</span>{approvalUrl && <a className="primary approval-link" href={approvalUrl} target="_blank" rel="noreferrer">Open PayPal Sandbox ↗</a>}</li><li><strong>Check approval</strong><span>Return here after approving the order.</span><button className="secondary" onClick={refreshOrder} disabled={busy}>Check order status</button></li><li><strong>Capture payment</strong><span>Capture once the order status is approved.</span><button className="primary" onClick={captureOrder} disabled={busy || orderStatus === "COMPLETED"}>{orderStatus === "COMPLETED" ? "Payment captured" : "Capture payment"}</button></li></ol><button className="switch" onClick={() => { setOrderId(""); setApprovalUrl(""); setOrderStatus(""); setResult(""); }}>Create another order</button></div>}
-    </> : <form onSubmit={verifyReference}><label>{provider === "capture" ? "Capture ID" : "Transaction reference"}<input name="reference" required placeholder={provider === "capture" ? "e.g. 5TY..." : "e.g. TRX_..."}/></label><button className="primary" disabled={busy}>{busy ? "Checking…" : "Check payment"}</button></form>}</>}
+    </> : provider === "paystack" ? <>{!paystackReference ? <form onSubmit={initializePaystack}><label>Test buyer email<input name="email" type="email" required placeholder="buyer@example.com" /></label><div className="form-row"><label>Amount<input name="amount" type="number" min="0.01" max="1000000" step="0.01" defaultValue="1000.00" required /></label><label>Currency<input name="currency" minLength={3} maxLength={3} pattern="[A-Za-z]{3}" defaultValue="NGN" required /></label></div><label>Description<input name="description" maxLength={120} defaultValue="Paystack test payment" required /></label><button className="primary" disabled={busy}>{busy ? "Creating…" : "Create Paystack test"}</button></form> : <div className="order-steps paystack-steps"><div className="order-summary"><span>Reference</span><strong>{paystackReference}</strong><span className="order-state">TEST</span></div><ol><li><strong>Open test checkout</strong><span>Use a Paystack test card. No real money will move.</span><a className="primary approval-link" href={paystackUrl} target="_blank" rel="noreferrer">Open Paystack checkout ↗</a></li><li><strong>Verify and record</strong><span>Return after checkout succeeds, then add it to your dashboard.</span><button className="primary" onClick={verifyInitializedPaystack} disabled={busy}>{busy ? "Verifying…" : "Verify payment"}</button></li></ol><button className="switch" onClick={() => { setPaystackReference(""); setPaystackUrl(""); setResult(""); }}>Create another Paystack test</button></div>}</> : <form onSubmit={verifyReference}><label>Capture ID<input name="reference" required placeholder="e.g. 5TY..."/></label><button className="primary" disabled={busy}>{busy ? "Checking…" : "Check payment"}</button></form>}</>}
     {result && <p className="form-result">{result}</p>}
     <button className="advanced-toggle" onClick={() => { setAdvanced((value) => !value); setResult(""); }}>{advanced ? "← Back to demo payment" : "Test with PayPal Sandbox or Paystack →"}</button>
   </div></div>;

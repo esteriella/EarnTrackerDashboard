@@ -55,6 +55,16 @@ export type PayPalOrder = {
   }>;
 };
 
+export type PayStackInitialization = {
+  status: boolean;
+  message: string;
+  data: {
+    authorization_url: string;
+    access_code: string;
+    reference: string;
+  };
+};
+
 // Keep browser requests on the frontend origin. The server bridge forwards
 // them to Render, avoiding browser CORS and mixed-content failures.
 const API_URL = "/api/backend";
@@ -110,6 +120,11 @@ export const api = {
   capturePayPalOrder: (orderId: string, token: string) =>
     request<PayPalOrder>(`/api/integrations/paypal/orders/${encodeURIComponent(orderId)}/capture`, {
       method: "POST",
+    }, token),
+  initializePayStack: (payment: { email: string; amount: number; currency: string; description: string; callbackUrl?: string }, token: string) =>
+    request<PayStackInitialization>("/api/integrations/paystack/transactions", {
+      method: "POST",
+      body: JSON.stringify(payment),
     }, token),
   verify: (provider: "paypal" | "paystack", reference: string, token: string) =>
     request<Record<string, unknown>>(
