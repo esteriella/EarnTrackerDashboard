@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using EarnTrackerApi.Exceptions;
+using EarnTrackerApi.Dtos.IntegrationDto;
 using EarnTrackerApi.Interfaces;
 using EarnTrackerApi.Models;
 
@@ -10,6 +11,47 @@ public sealed class PaymentRecordingService(IUnitOfWork unitOfWork)
     : IPaymentRecordingService
 {
     private const string Provider = "PayPal";
+
+    public async Task<EarningTransaction> RecordDemoPaymentAsync(
+        Guid userId,
+        CreateDemoPaymentDto request,
+        CancellationToken cancellationToken = default)
+    {
+        const string demoProvider = "Demo";
+        var currency = request.Currency.Trim().ToUpperInvariant();
+        var source = await unitOfWork.Library.GetIncomeSourceAsync(
+            userId,
+            demoProvider,
+            currency,
+            cancellationToken);
+
+        if (source is null)
+        {
+            source = new IncomeSource
+            {
+                UserId = userId,
+                Name = "Demo payments",
+                Provider = demoProvider,
+                Currency = currency
+            };
+            await unitOfWork.Library.AddIncomeSourceAsync(source, cancellationToken);
+        }
+
+        var transaction = new EarningTransaction
+        {
+            IncomeSourceId = source.Id,
+            ExternalId = $"DEMO-{Guid.NewGuid():N}",
+            Amount = request.Amount,
+            Fee = 0,
+            Currency = currency,
+            Status = "Completed",
+            Description = $"Demo · {request.Description.Trim()}",
+            OccurredAt = DateTimeOffset.UtcNow
+        };
+        await unitOfWork.Library.AddTransactionAsync(transaction, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return transaction;
+    }
 
     public async Task RecordPayPalCapturesAsync(
         Guid userId,

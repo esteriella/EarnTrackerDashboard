@@ -15,6 +15,31 @@ public sealed class IntegrationsController(
     IPayStackService payStack,
     IPaymentRecordingService paymentRecorder) : ControllerBase
 {
+    /// <summary>Records a fictional payment for product demonstration only.</summary>
+    [HttpPost("demo/payments")]
+    public async Task<ActionResult> CreateDemoPayment(
+        [FromBody] CreateDemoPaymentDto request,
+        CancellationToken cancellationToken)
+    {
+        var transaction = await paymentRecorder.RecordDemoPaymentAsync(
+            User.GetUserId(),
+            request,
+            cancellationToken);
+
+        return Ok(new
+        {
+            transaction.Id,
+            transaction.ExternalId,
+            transaction.Amount,
+            transaction.Fee,
+            transaction.Currency,
+            transaction.Status,
+            transaction.Description,
+            transaction.OccurredAt,
+            IsDemo = true
+        });
+    }
+
     /// <summary>Creates a PayPal Sandbox order and returns its buyer approval link.</summary>
     [HttpPost("paypal/orders")]
     public async Task<ActionResult<JsonElement>> CreatePayPalOrder(

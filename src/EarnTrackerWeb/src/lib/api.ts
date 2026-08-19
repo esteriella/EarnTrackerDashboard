@@ -95,6 +95,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify(goal),
     }, token),
+  createDemoPayment: (amount: number, currency: string, description: string, token: string) =>
+    request<Transaction & { isDemo: boolean }>("/api/integrations/demo/payments", {
+      method: "POST",
+      body: JSON.stringify({ amount, currency, description }),
+    }, token),
   createPayPalOrder: (amount: number, currency: string, description: string, token: string) =>
     request<PayPalOrder>("/api/integrations/paypal/orders", {
       method: "POST",
