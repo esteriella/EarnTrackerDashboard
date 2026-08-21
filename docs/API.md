@@ -204,7 +204,7 @@ Initialize a test transaction in Scalar:
   "amount": 1000,
   "currency": "NGN",
   "description": "Paystack Scalar test",
-  "callbackUrl": "http://localhost:3000/?payment=paystack"
+  "callbackUrl": "http://localhost:3000/dashboard?payment=paystack"
 }
 ```
 
