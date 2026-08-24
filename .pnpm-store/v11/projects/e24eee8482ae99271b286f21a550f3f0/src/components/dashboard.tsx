@@ -72,11 +72,8 @@ export function Dashboard() {
   const syncedGoals = useMemo<Overview["financialGoals"]>(() => overview.financialGoals.map((item) => {
     const currentAmount = transactions
       .filter((transaction) => {
-        const occurredOn = new Date(transaction.occurredAt).toISOString().slice(0, 10);
         return transaction.status.toLowerCase() === "completed"
-          && transaction.currency.toUpperCase() === item.currency.toUpperCase()
-          && occurredOn >= item.startDate
-          && occurredOn <= item.targetDate;
+          && transaction.currency.toUpperCase() === item.currency.toUpperCase();
       })
       .reduce((sum, transaction) => sum + transaction.amount - transaction.fee, 0);
     const isAchieved = currentAmount >= item.targetAmount;

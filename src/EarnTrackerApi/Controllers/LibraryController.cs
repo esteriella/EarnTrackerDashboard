@@ -67,6 +67,9 @@ public sealed class LibraryController(IUnitOfWork unitOfWork) : ControllerBase
         IEnumerable<EarningTransaction> transactions)
     {
         return transactions
+            .Where(transaction => transaction.Status.Equals(
+                "Completed",
+                StringComparison.OrdinalIgnoreCase))
             .GroupBy(transaction => transaction.Currency.ToUpperInvariant())
             .Select(group => new EarningsTotalResponse(
                 group.Key,
@@ -110,9 +113,7 @@ public sealed class LibraryController(IUnitOfWork unitOfWork) : ControllerBase
                     StringComparison.OrdinalIgnoreCase) &&
                 transaction.Currency.Equals(
                     goal.Currency,
-                    StringComparison.OrdinalIgnoreCase) &&
-                DateOnly.FromDateTime(transaction.OccurredAt.UtcDateTime) >= goal.StartDate &&
-                DateOnly.FromDateTime(transaction.OccurredAt.UtcDateTime) <= goal.TargetDate)
+                    StringComparison.OrdinalIgnoreCase))
             .Sum(transaction => transaction.Amount - transaction.Fee);
         var percentage = goal.TargetAmount <= 0
             ? 0

@@ -276,7 +276,7 @@ It may also appear as the seller-side transaction ID in the business sandbox acc
 
 ## Financial goals
 
-Users set a name, target net amount, currency, start date, and target date. Only completed transactions with the same currency and an occurrence date inside the inclusive date range contribute.
+Users set a name, target net amount, currency, start date, and target date. Goal progress uses the full completed net earnings balance in the same currency. The target date determines when an unfinished goal expires.
 
 ```text
 current amount = sum(amount - fee)
