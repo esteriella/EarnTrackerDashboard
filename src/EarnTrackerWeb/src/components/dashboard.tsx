@@ -69,21 +69,36 @@ export function Dashboard() {
   const transactions = useMemo(() => overview.incomeSources
     .flatMap((source) => source.transactions.map((transaction) => ({ ...transaction, source: source.name })))
     .sort((left, right) => +new Date(right.occurredAt) - +new Date(left.occurredAt)), [overview]);
+  const syncedGoals = useMemo<Overview["financialGoals"]>(() => overview.financialGoals.map((item) => {
+    const currentAmount = transactions
+      .filter((transaction) => {
+        const occurredOn = new Date(transaction.occurredAt).toISOString().slice(0, 10);
+        return transaction.status.toLowerCase() === "completed"
+          && transaction.currency.toUpperCase() === item.currency.toUpperCase()
+          && occurredOn >= item.startDate
+          && occurredOn <= item.targetDate;
+      })
+      .reduce((sum, transaction) => sum + transaction.amount - transaction.fee, 0);
+    const isAchieved = currentAmount >= item.targetAmount;
+    const progressPercentage = item.targetAmount > 0
+      ? Math.min(100, Math.round(currentAmount / item.targetAmount * 10_000) / 100)
+      : 0;
+    const status: Overview["financialGoals"][number]["status"] = isAchieved ? "Achieved" : item.targetDate < new Date().toISOString().slice(0, 10) ? "Expired" : "Active";
+    return { ...item, currentAmount, progressPercentage, isAchieved, status };
+  }), [overview.financialGoals, transactions]);
+  const syncedOverview = useMemo(() => ({ ...overview, financialGoals: syncedGoals }), [overview, syncedGoals]);
   const total = overview.totals.find((item) => item.currency === selectedCurrency) ?? overview.totals[0] ?? { currency: "USD", gross: 0, fees: 0, net: 0 };
-  const goal = overview.financialGoals.find((item) => item.currency === total.currency && item.status === "Active")
-    ?? overview.financialGoals.find((item) => item.currency === total.currency && item.status === "Achieved")
-    ?? overview.financialGoals.find((item) => item.status === "Active")
-    ?? overview.financialGoals.find((item) => item.status === "Achieved");
+  const goal = syncedGoals.find((item) => item.status === "Active") ?? syncedGoals.find((item) => item.status === "Achieved");
   const notifications = useMemo<DashboardNotification[]>(() => {
     const items: DashboardNotification[] = [];
     const latest = transactions[0];
     if (latest) items.push({ id: `transaction-${latest.id}`, title: "Latest payment", detail: `${latest.description || latest.source} was recorded in ${latest.currency}.` });
-    const achievedGoal = overview.financialGoals.find((item) => item.status === "Achieved");
+    const achievedGoal = syncedGoals.find((item) => item.status === "Achieved");
     if (achievedGoal) items.push({ id: `goal-${achievedGoal.id}`, title: "Goal achieved", detail: `${achievedGoal.name} has reached its target.` });
-    const activeGoal = overview.financialGoals.find((item) => item.status === "Active" && item.targetAmount > 0 && item.currentAmount / item.targetAmount >= 0.75);
+    const activeGoal = syncedGoals.find((item) => item.status === "Active" && item.targetAmount > 0 && item.currentAmount / item.targetAmount >= 0.75);
     if (activeGoal) items.push({ id: `goal-progress-${activeGoal.id}`, title: "Goal almost complete", detail: `${activeGoal.name} is at ${Math.min(100, Math.round(activeGoal.currentAmount / activeGoal.targetAmount * 100))}%.` });
     return items.slice(0, 3);
-  }, [overview.financialGoals, transactions]);
+  }, [syncedGoals, transactions]);
 
   function signOut() { clearSession(); setSession(null); router.replace("/"); }
   function closePayment() { setPaymentOpen(false); setReturnedPaystackReference(""); if (window.location.search) window.history.replaceState({}, "", "/dashboard"); }
@@ -96,8 +111,8 @@ export function Dashboard() {
       <DashboardHeader active={active} displayName={session.name} notifications={notifications} accountOpen={accountOpen} onAccountToggle={() => setAccountOpen((value) => !value)} onPayment={() => { setPaymentOpen(true); setAccountOpen(false); }} onSignOut={signOut}/>
       {notice && <div className="notice"><span>{notice}</span><button onClick={() => setNotice("")}>×</button></div>}
       {active === "Overview"
-        ? <OverviewView displayName={session.name} overview={overview} total={total} goal={goal} transactions={transactions} onCurrency={setSelectedCurrency} onViewGoals={() => setActive("Goals")} onViewTransactions={() => setActive("Transactions")}/>
-        : <DashboardSection active={active} overview={overview} transactions={transactions} onVerify={() => setPaymentOpen(true)} onCreateGoal={() => setGoalOpen(true)}/>
+        ? <OverviewView displayName={session.name} overview={syncedOverview} total={total} goal={goal} transactions={transactions} onCurrency={setSelectedCurrency} onViewGoals={() => setActive("Goals")} onViewTransactions={() => setActive("Transactions")}/>
+        : <DashboardSection active={active} overview={syncedOverview} transactions={transactions} onVerify={() => setPaymentOpen(true)} onCreateGoal={() => setGoalOpen(true)}/>
       }
       {loading && <div className="loading">Updating your dashboard…</div>}
     </main>
