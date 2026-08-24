@@ -41,22 +41,39 @@ export function Dashboard() {
       .catch((cause) => setNotice(cause instanceof Error ? cause.message : "Could not update the dashboard."));
   }, [router]);
 
-  const refreshOverview = useCallback(async (preferredCurrency?: string) => {
+  const refreshOverview = useCallback(async (preferredCurrency?: string, showLoading = true) => {
     if (!session) return;
-    setLoading(true);
+    if (showLoading) setLoading(true);
     try {
       setOverview(await api.overview(session.token));
       if (preferredCurrency) setSelectedCurrency(preferredCurrency.toUpperCase());
     } catch (cause) {
       setNotice(cause instanceof Error ? cause.message : "Could not update the dashboard.");
-    } finally { setLoading(false); }
+    } finally { if (showLoading) setLoading(false); }
   }, [session]);
+
+  useEffect(() => {
+    if (!session) return;
+    const refreshSilently = () => { void refreshOverview(undefined, false); };
+    const refreshWhenVisible = () => { if (document.visibilityState === "visible") refreshSilently(); };
+    window.addEventListener("focus", refreshSilently);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    const timer = window.setInterval(refreshSilently, 30_000);
+    return () => {
+      window.removeEventListener("focus", refreshSilently);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      window.clearInterval(timer);
+    };
+  }, [refreshOverview, session]);
 
   const transactions = useMemo(() => overview.incomeSources
     .flatMap((source) => source.transactions.map((transaction) => ({ ...transaction, source: source.name })))
     .sort((left, right) => +new Date(right.occurredAt) - +new Date(left.occurredAt)), [overview]);
   const total = overview.totals.find((item) => item.currency === selectedCurrency) ?? overview.totals[0] ?? { currency: "USD", gross: 0, fees: 0, net: 0 };
-  const goal = overview.financialGoals.find((item) => item.status === "Active") ?? overview.financialGoals.find((item) => item.status === "Achieved");
+  const goal = overview.financialGoals.find((item) => item.currency === total.currency && item.status === "Active")
+    ?? overview.financialGoals.find((item) => item.currency === total.currency && item.status === "Achieved")
+    ?? overview.financialGoals.find((item) => item.status === "Active")
+    ?? overview.financialGoals.find((item) => item.status === "Achieved");
   const notifications = useMemo<DashboardNotification[]>(() => {
     const items: DashboardNotification[] = [];
     const latest = transactions[0];
@@ -84,7 +101,7 @@ export function Dashboard() {
       }
       {loading && <div className="loading">Updating your dashboard…</div>}
     </main>
-    {paymentOpen && <PaymentModal token={session.token} initialPaystackReference={returnedPaystackReference} onClose={closePayment} onPaymentRecorded={refreshOverview}/>}
+    {paymentOpen && <PaymentModal token={session.token} initialPaystackReference={returnedPaystackReference} onClose={closePayment} onPaymentRecorded={refreshOverview}/>} 
     {goalOpen && <GoalModal token={session.token} onClose={() => setGoalOpen(false)} onCreated={async () => { await refreshOverview(); setGoalOpen(false); setNotice("Your new financial goal is ready."); }}/>}
   </div>;
 }
