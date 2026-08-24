@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, type AuthSession, type Overview } from "@/lib/api";
 import { clearSession, readSession } from "@/lib/session";
-import { DashboardHeader, DashboardSidebar } from "@/components/dashboard/navigation";
+import { DashboardHeader, DashboardSidebar, type DashboardNotification } from "@/components/dashboard/navigation";
 import { GoalModal, PaymentModal } from "@/components/dashboard/modals";
 import { DashboardSection, OverviewView } from "@/components/dashboard/views";
 
@@ -57,6 +57,16 @@ export function Dashboard() {
     .sort((left, right) => +new Date(right.occurredAt) - +new Date(left.occurredAt)), [overview]);
   const total = overview.totals.find((item) => item.currency === selectedCurrency) ?? overview.totals[0] ?? { currency: "USD", gross: 0, fees: 0, net: 0 };
   const goal = overview.financialGoals.find((item) => item.status === "Active") ?? overview.financialGoals.find((item) => item.status === "Achieved");
+  const notifications = useMemo<DashboardNotification[]>(() => {
+    const items: DashboardNotification[] = [];
+    const latest = transactions[0];
+    if (latest) items.push({ id: `transaction-${latest.id}`, title: "Latest payment", detail: `${latest.description || latest.source} was recorded in ${latest.currency}.` });
+    const achievedGoal = overview.financialGoals.find((item) => item.status === "Achieved");
+    if (achievedGoal) items.push({ id: `goal-${achievedGoal.id}`, title: "Goal achieved", detail: `${achievedGoal.name} has reached its target.` });
+    const activeGoal = overview.financialGoals.find((item) => item.status === "Active" && item.targetAmount > 0 && item.currentAmount / item.targetAmount >= 0.75);
+    if (activeGoal) items.push({ id: `goal-progress-${activeGoal.id}`, title: "Goal almost complete", detail: `${activeGoal.name} is at ${Math.min(100, Math.round(activeGoal.currentAmount / activeGoal.targetAmount * 100))}%.` });
+    return items.slice(0, 3);
+  }, [overview.financialGoals, transactions]);
 
   function signOut() { clearSession(); setSession(null); router.replace("/"); }
   function closePayment() { setPaymentOpen(false); setReturnedPaystackReference(""); if (window.location.search) window.history.replaceState({}, "", "/dashboard"); }
@@ -66,10 +76,10 @@ export function Dashboard() {
   return <div className="app-shell">
     <DashboardSidebar active={active} displayName={session.name} onNavigate={(item) => { setActive(item); setAccountOpen(false); }} onSignOut={signOut}/>
     <main className="main">
-      <DashboardHeader active={active} displayName={session.name} accountOpen={accountOpen} onAccountToggle={() => setAccountOpen((value) => !value)} onPayment={() => { setPaymentOpen(true); setAccountOpen(false); }} onSignOut={signOut}/>
+      <DashboardHeader active={active} displayName={session.name} notifications={notifications} accountOpen={accountOpen} onAccountToggle={() => setAccountOpen((value) => !value)} onPayment={() => { setPaymentOpen(true); setAccountOpen(false); }} onSignOut={signOut}/>
       {notice && <div className="notice"><span>{notice}</span><button onClick={() => setNotice("")}>×</button></div>}
       {active === "Overview"
-        ? <OverviewView displayName={session.name} overview={overview} total={total} goal={goal} transactions={transactions} onCurrency={setSelectedCurrency}/>
+        ? <OverviewView displayName={session.name} overview={overview} total={total} goal={goal} transactions={transactions} onCurrency={setSelectedCurrency} onViewGoals={() => setActive("Goals")} onViewTransactions={() => setActive("Transactions")}/>
         : <DashboardSection active={active} overview={overview} transactions={transactions} onVerify={() => setPaymentOpen(true)} onCreateGoal={() => setGoalOpen(true)}/>
       }
       {loading && <div className="loading">Updating your dashboard…</div>}

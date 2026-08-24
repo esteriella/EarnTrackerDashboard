@@ -1,14 +1,45 @@
+"use client";
+
+import { useMemo, useState } from "react";
 import type { Goal, Overview } from "@/lib/api";
-import { CardHead, EarningsChart, money, type SourcedTransaction, TransactionTable } from "@/components/dashboard/shared";
+import { CardHead, EarningsChart, money, type ChartPoint, type SourcedTransaction, TransactionTable } from "@/components/dashboard/shared";
 
 type Total = Overview["totals"][number];
+type ChartRange = "6" | "12" | "year";
+
+function monthlySeries(transactions: SourcedTransaction[], currency: string, range: ChartRange): ChartPoint[] {
+  const now = new Date();
+  const count = range === "year" ? now.getMonth() + 1 : Number(range);
+  const startMonth = range === "year" ? 0 : now.getMonth() - count + 1;
+  const months = Array.from({ length: count }, (_, index) => new Date(now.getFullYear(), startMonth + index, 1));
+
+  return months.map((month) => {
+    const matching = transactions.filter((transaction) => {
+      const date = new Date(transaction.occurredAt);
+      return transaction.currency === currency && date.getFullYear() === month.getFullYear() && date.getMonth() === month.getMonth();
+    });
+    return {
+      label: month.toLocaleDateString("en-US", { month: "short" }),
+      net: matching.reduce((sum, item) => sum + item.amount - item.fee, 0),
+      fees: matching.reduce((sum, item) => sum + item.fee, 0),
+    };
+  });
+}
 
 function Stat({ label, value, change, good, sub, icon }: { label: string; value: string; change?: string; good?: boolean; sub?: string; icon: string }) {
   return <article className="stat card"><div className="stat-icon">{icon}</div><p>{label}</p><h3>{value}</h3>{change ? <small className={good ? "good" : "muted"}>↗ {change} <span>from last month</span></small> : <small className="muted">{sub}</small>}</article>;
 }
 
-export function OverviewView({ displayName, overview, total, goal, transactions, onCurrency }: { displayName: string; overview: Overview; total: Total; goal?: Goal; transactions: SourcedTransaction[]; onCurrency: (currency: string) => void }) {
-  return <><section className="welcome"><div><p className="eyebrow">YOUR EARNINGS TODAY</p><h2>Good to see you, {displayName.split(" ")[0]} <span>✦</span></h2><p>Here&apos;s how your earnings are looking.</p></div>{overview.totals.length > 0 && <div className="period currency-picker" aria-label="Displayed currency">{overview.totals.map((item) => <button key={item.currency} className={item.currency === total.currency ? "selected" : ""} onClick={() => onCurrency(item.currency)}>{item.currency}</button>)}</div>}</section><section className="stats"><Stat label="Net earnings" value={money(total.net, total.currency)} change="12.4%" good icon="↗"/><Stat label="Gross income" value={money(total.gross, total.currency)} change="8.2%" good icon="＋"/><Stat label="Fees paid" value={money(total.fees, total.currency)} change="2.1%" icon="−"/><Stat label="Active sources" value={String(overview.incomeSources.filter((source) => source.isActive).length)} sub="Across your accounts" icon="⌁"/></section><section className="dashboard-grid"><div className="card chart-card"><CardHead title="Earnings flow" action="Last 6 months⌄"/><div className="chart-summary"><div><small>Total earned</small><strong>{money(total.gross, total.currency)}</strong></div><div className="legend"><span><i className="net-dot"/>Net earnings</span><span><i/>Fees</span></div></div><EarningsChart/></div><div className="card goal-card"><CardHead title="Monthly goal" action="View goals →"/><div className="goal-ring" style={{"--progress": `${goal?.progressPercentage ?? 0}%`} as React.CSSProperties}><div><strong>{Math.round(goal?.progressPercentage ?? 0)}%</strong><small>complete</small></div></div><h3>{goal?.name ?? "Set your first goal"}</h3><p><strong>{money(goal?.currentAmount ?? 0, goal?.currency)}</strong> of {money(goal?.targetAmount ?? 0, goal?.currency)}</p><div className="goal-note">✦ You&apos;re {money(Math.max(0, (goal?.targetAmount ?? 0) - (goal?.currentAmount ?? 0)), goal?.currency)} away</div></div></section><section className="card recent"><CardHead title="Recent transactions" action="View all →"/><TransactionTable transactions={transactions.slice(0,5)}/></section></>;
+export function OverviewView({ displayName, overview, total, goal, transactions, onCurrency, onViewGoals, onViewTransactions }: { displayName: string; overview: Overview; total: Total; goal?: Goal; transactions: SourcedTransaction[]; onCurrency: (currency: string) => void; onViewGoals: () => void; onViewTransactions: () => void }) {
+  const [range, setRange] = useState<ChartRange>("6");
+  const points = useMemo(() => monthlySeries(transactions, total.currency, range), [transactions, total.currency, range]);
+  const chartTotal = points.reduce((sum, point) => sum + point.net, 0);
+
+  return <><section className="welcome"><div><p className="eyebrow">YOUR EARNINGS TODAY</p><h2>Good to see you, {displayName.split(" ")[0]} <span>✦</span></h2><p>Here&apos;s how your earnings are looking.</p></div>{overview.totals.length > 0 && <div className="period currency-picker" aria-label="Displayed currency">{overview.totals.map((item) => <button key={item.currency} className={item.currency === total.currency ? "selected" : ""} onClick={() => onCurrency(item.currency)}>{item.currency}</button>)}</div>}</section>
+    <section className="stats"><Stat label="Net earnings" value={money(total.net, total.currency)} change="12.4%" good icon="↗"/><Stat label="Gross income" value={money(total.gross, total.currency)} change="8.2%" good icon="＋"/><Stat label="Fees paid" value={money(total.fees, total.currency)} change="2.1%" icon="−"/><Stat label="Active sources" value={String(overview.incomeSources.filter((source) => source.isActive).length)} sub="Across your accounts" icon="⌁"/></section>
+    <section className="dashboard-grid"><div className="card chart-card"><CardHead title="Earnings flow" action={<select className="chart-range" value={range} onChange={(event) => setRange(event.target.value as ChartRange)} aria-label="Chart date range"><option value="6">Last 6 months</option><option value="12">Last 12 months</option><option value="year">This year</option></select>}/><div className="chart-summary"><div><small>Net earned in range</small><strong>{money(chartTotal, total.currency)}</strong></div><div className="legend"><span><i className="net-dot"/>Net earnings</span><span><i/>Fees</span></div></div><EarningsChart points={points} currency={total.currency}/></div>
+      <div className="card goal-card"><CardHead title="Monthly goal" action="View goals →" onAction={onViewGoals}/><div className="goal-ring" style={{"--progress": `${goal?.progressPercentage ?? 0}%`} as React.CSSProperties}><div><strong>{Math.round(goal?.progressPercentage ?? 0)}%</strong><small>complete</small></div></div><h3>{goal?.name ?? "Set your first goal"}</h3><p><strong>{money(goal?.currentAmount ?? 0, goal?.currency)}</strong> of {money(goal?.targetAmount ?? 0, goal?.currency)}</p><div className="goal-note">✦ You&apos;re {money(Math.max(0, (goal?.targetAmount ?? 0) - (goal?.currentAmount ?? 0)), goal?.currency)} away</div></div></section>
+    <section className="card recent"><CardHead title="Recent transactions" action="View all →" onAction={onViewTransactions}/><TransactionTable transactions={transactions.slice(0,5)}/></section></>;
 }
 
 function GoalsView({ goals, onCreate }: { goals: Goal[]; onCreate: () => void }) {
