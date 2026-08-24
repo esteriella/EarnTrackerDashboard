@@ -76,11 +76,18 @@ export function Dashboard() {
           && transaction.currency.toUpperCase() === item.currency.toUpperCase();
       })
       .reduce((sum, transaction) => sum + transaction.amount - transaction.fee, 0);
-    const isAchieved = currentAmount >= item.targetAmount;
+    const today = new Date().toISOString().slice(0, 10);
+    const isAchieved = item.startDate <= today && currentAmount >= item.targetAmount;
     const progressPercentage = item.targetAmount > 0
       ? Math.min(100, Math.round(currentAmount / item.targetAmount * 10_000) / 100)
       : 0;
-    const status: Overview["financialGoals"][number]["status"] = isAchieved ? "Achieved" : item.targetDate < new Date().toISOString().slice(0, 10) ? "Expired" : "Active";
+    const status: Overview["financialGoals"][number]["status"] = item.startDate > today
+      ? "Upcoming"
+      : isAchieved
+        ? "Achieved"
+        : item.targetDate < today
+          ? "Expired"
+          : "Active";
     return { ...item, currentAmount, progressPercentage, isAchieved, status };
   }), [overview.financialGoals, transactions]);
   const syncedOverview = useMemo(() => ({ ...overview, financialGoals: syncedGoals }), [overview, syncedGoals]);

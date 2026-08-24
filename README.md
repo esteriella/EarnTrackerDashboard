@@ -285,6 +285,7 @@ progress = min(100, current amount / target amount × 100)
 
 | Status | Meaning |
 | --- | --- |
+| Upcoming | Start date has not arrived yet |
 | Active | Below target and target date has not passed |
 | Achieved | Net earnings reached or exceeded the target |
 | Expired | Target date passed before achievement |

@@ -34,7 +34,7 @@ export type Goal = {
   currency: string;
   startDate: string;
   targetDate: string;
-  status: "Active" | "Achieved" | "Expired";
+  status: "Upcoming" | "Active" | "Achieved" | "Expired";
   isAchieved: boolean;
 };
 

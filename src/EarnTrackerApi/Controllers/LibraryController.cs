@@ -118,12 +118,15 @@ public sealed class LibraryController(IUnitOfWork unitOfWork) : ControllerBase
         var percentage = goal.TargetAmount <= 0
             ? 0
             : Math.Min(100, Math.Round(currentAmount / goal.TargetAmount * 100, 2));
-        var isAchieved = currentAmount >= goal.TargetAmount;
-        var status = isAchieved
-            ? "Achieved"
-            : goal.TargetDate < DateOnly.FromDateTime(DateTime.UtcNow)
-                ? "Expired"
-                : "Active";
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var isAchieved = goal.StartDate <= today && currentAmount >= goal.TargetAmount;
+        var status = goal.StartDate > today
+            ? "Upcoming"
+            : isAchieved
+                ? "Achieved"
+                : goal.TargetDate < today
+                    ? "Expired"
+                    : "Active";
 
         return new FinancialGoalResponse(
             goal.Id,
