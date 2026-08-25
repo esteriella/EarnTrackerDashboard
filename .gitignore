@@ -1,0 +1,47 @@
+# Visual Studio user settings and local workspace data
+.vs/
+
+# Package dependencies and local caches
+node_modules/
+.pnpm-store/
+.pnp/
+.pnp.*
+
+# Frontend build and test output
+.next/
+out/
+build/
+coverage/
+
+# .NET build and test output
+bin/
+obj/
+TestResults/
+
+# Local environment files and secrets
+.env
+.env.*
+!.env.example
+appsettings.Local.json
+appsettings.*.Local.json
+*.pem
+*.pfx
+
+# Logs and temporary files
+logs/
+*.log
+*.tmp
+
+# Editor and operating-system files
+.idea/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.DS_Store
+Thumbs.db
+
+# Hosting and compiler-generated files
+.vercel/
+*.tsbuildinfo
