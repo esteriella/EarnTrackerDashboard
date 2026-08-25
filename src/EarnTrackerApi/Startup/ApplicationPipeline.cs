@@ -33,6 +33,7 @@ public static class ApplicationPipeline
         app.UseAuthentication();
         app.UseAuthorization();
 
+
         app.MapGet("/health", () => Results.Ok(new
         {
             status = "Healthy",
